@@ -4,6 +4,7 @@ pub mod systems_common;
 pub mod systems_ui;
 pub mod systems_egui;
 pub mod resources_ui;
+pub mod events_ui;
 
 pub mod ui {
     use bevy::app::MainScheduleOrder;
@@ -18,6 +19,7 @@ pub mod ui {
     use crate::systems_egui::*;
     use crate::systems_ui::*;
     use crate::resources_ui::*;
+    use crate::events_ui::*;
     
 
     #[derive(SystemSet, Debug, Hash, PartialEq, Eq, Clone)]
@@ -33,7 +35,13 @@ pub mod ui {
     pub struct UpdateUIPlaceholderManagement;
 
     #[derive(SystemSet, Debug, Hash, PartialEq, Eq, Clone)]
+    pub struct UpdateUITerritoryDrag;
+
+    #[derive(SystemSet, Debug, Hash, PartialEq, Eq, Clone)]
     pub struct UpdateUIDisplay;
+
+    #[derive(SystemSet, Debug, Hash, PartialEq, Eq, Clone)]
+    pub struct UpdateUIDebug;
 
     // Plugin for the Territory Tabs UI, handling all initialization and updating.
     pub struct TerritoryTabsPlugin;
@@ -47,6 +55,10 @@ pub mod ui {
                 .add_plugins(InputManagerPlugin::<DevControls>::default())
                 .init_resource::<ActionState<DevControls>>()
                 .insert_resource(DevControls::default_input_map())
+
+                .add_event::<TerritoryDragStarted>()
+                .add_event::<TerritoryDragged>()
+                .add_event::<TerritoryDragEnded>()
 
                 .add_event::<TestChordJustPressed>()
                 .add_event::<TestChordPressed>()
@@ -66,11 +78,11 @@ pub mod ui {
                     cleanup_all_entities_with::<CleanupOnMovingTabExit>
                 ))
 
-
-                // Update
+                // System Sets: Update
                 .add_systems(Update, (
                     (
-                        territory_tabs_state_change
+                        territory_tabs_state_drag_territories,
+                        territory_tabs_state_tab_move
                     ).in_set(UpdateUIStateChanges),
                     (
                         test_spawn_window,
@@ -89,18 +101,31 @@ pub mod ui {
                             .before(check_placeholder_types_entering_window),
                         check_placeholder_types_entering_window
                             .run_if(on_event::<CursorEntered>())
-                            .before(check_placeholder_types_on_mouse_move),
-                        check_placeholder_types_on_mouse_move
+                            .before(check_placeholder_types_mouse_moving),
+                        check_placeholder_types_mouse_moving
                             .run_if(on_event::<CursorMoved>())
                             .before(calculate_placeholder_data),
                         calculate_placeholder_data
                             .run_if(on_event::<CursorMoved>())
                     ).in_set(UpdateUIPlaceholderManagement),
                     (
+                        determine_territory_drag_position
+                            .run_if(on_event::<TerritoryDragged>())
+                            .before(check_territory_drag_collision),
+                        check_territory_drag_collision
+                            .run_if(on_event::<TerritoryDragged>())
+                            .before(check_window_drag_collision),
+                        check_window_drag_collision
+                            .run_if(on_event::<TerritoryDragged>()),
+                    ).in_set(UpdateUITerritoryDrag),
+                    (
                         egui_display_territories
                             .before(display_placeholders),
                         display_placeholders
-                    ).in_set(UpdateUIDisplay)
+                    ).in_set(UpdateUIDisplay),
+                    (
+                        display_debug_info
+                    ).in_set(UpdateUIDebug)
                 ))
 
                 // Set Config: Update
@@ -118,6 +143,15 @@ pub mod ui {
                     (
                         UpdateUIPlaceholderManagement
                             .before(UpdateUIDisplay)
+                    ),
+                    (
+                        UpdateUITerritoryDrag
+                            .run_if(in_state(TerritoryTabsState::DraggingTerritories))
+                            .before(UpdateUIDisplay)
+                    ),
+                    (
+                        UpdateUIDisplay
+                            .before(UpdateUIDebug)
                     )
                 ))
 

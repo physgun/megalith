@@ -1,20 +1,38 @@
+use std::ops::{Add, Sub};
+
 use bevy::prelude::*;
 use bevy_egui::egui::epaint::Shadow;
-use bevy_egui::egui::{Align2, Rect as eguiRect};
+use bevy_egui::egui::{Align2, Rect as eguiRect, Style as eguiStyle, Vec2 as eguiVec2};
 use bevy_egui::egui::{Pos2};
 use bevy_egui::{egui, EguiContext};
 
 use crate::components_ui::*;
+use crate::events_ui::*;
 use crate::input_manager::*;
 use crate::resources_ui::*;
+use crate::systems_common::TerritoryTabsState;
 use crate::systems_ui::*;
-
-// egui demands you give every egui window spawned a unique name.
-// This resource exists to assign ascending integers to every egui window name request.
 
 // Insert egui related resources.
 pub fn initialize_egui_resources (mut commands: Commands) {
     
+}
+
+// egui Debug Info Window until we get Tabs up and running.
+pub fn display_debug_info(
+    territory_tabs_current_state: Res<State<TerritoryTabsState>>,
+    mut window_query: Query<(Entity, &Window, &mut EguiContext), With<EguiDisplay>>
+) {
+    for (window_entity, window, mut context) in &mut window_query {
+        egui::Window::new("Debug Window")
+            .title_bar(false)
+            .anchor(Align2::LEFT_BOTTOM, eguiVec2::new(0.0, 0.0))
+            .show(context.get_mut(), |ui| {
+                let label = format!("Current State: {:?}", territory_tabs_current_state.get());
+                ui.label(label)
+            }
+        );
+    }
 }
 
 // How this shit work????
@@ -24,18 +42,23 @@ pub fn display_placeholders(
     placeholder_query: Query<&Placeholder>
 ) {
     for placeholder in & placeholder_query {
-        gizmos.rect_2d(
-            placeholder.visual_rects[0].center(), 
-            0.0,
-            placeholder.visual_rects[0].size(),
-            Color::RED
-        );
-        gizmos.rect_2d(
-            placeholder.visual_rects[1].center(), 
-            0.0,
-            placeholder.visual_rects[1].size(),
-            Color::WHITE
-        );
+        match placeholder.placeholder_type {
+            PlaceholderType::SpawnTerritory => {
+                gizmos.rect_2d(
+                    placeholder.worldspace_visual_rects[0].center(), 
+                    0.0,
+                    placeholder.worldspace_visual_rects[0].size(),
+                    Color::RED
+                );
+                gizmos.rect_2d(
+                    placeholder.worldspace_visual_rects[1].center(), 
+                    0.0,
+                    placeholder.worldspace_visual_rects[1].size(),
+                    Color::WHITE
+                );
+            }
+            _ => {}
+        };
     }
 }
 
@@ -43,42 +66,71 @@ pub fn display_placeholders(
 // Try to see what egui can do as far as representing Territories goes.
 pub fn egui_display_territories(
     mut gizmos: Gizmos,
+    territory_settings: Res<TerritorySettings>,
+    mut territory_drag_started: EventWriter<TerritoryDragStarted>,
+    mut territory_dragged: EventWriter<TerritoryDragged>,
+    mut territory_drag_ended: EventWriter<TerritoryDragEnded>,
     mut window_query: Query<(Entity, &Window, &mut EguiContext), With<EguiDisplay>>,
     territory_query: Query<(Entity, &Parent, &Territory)>
 ) {
-    // Iterate through windows, and their Territory children with EguiDisplay components.
+    // Iterate through windows with EguiDisplay components, and their Territory children.
     for (window_entity, window, mut context) in &mut window_query {
-        for (territory_entity_id, territory_parent, territory) in & territory_query {
+        for (territory_entity, territory_parent, territory) in & territory_query {
             if territory_parent.get() == window_entity {
-                // Both Bevy and egui have a Rect type in their libraries! Need to convert from Bevy to egui.
-                let egui_territory_rect: eguiRect = eguiRect { 
-                    min: Pos2::new(territory.rect.min.x, territory.rect.min.y), 
-                    max: Pos2::new(territory.rect.max.x, territory.rect.max.y) 
-                };
 
-                // Convert bevy's Vec2 to egui's Pos2.
-                let egui_territory_rect_center = Pos2::new(territory.rect.center().x, territory.rect.center().y);
-
-                gizmos.rect_2d(
-                    territory.rect.center(), 
-                    0.0,
-                    territory.rect.size(),
-                    Color::BLUE
+                // Both Bevy and egui have Vec2 / Rect types in their libraries! Need to convert from Bevy to egui.
+                let egui_territory_rect = eguiRect::from_center_size(
+                    Pos2::new( 
+                        territory.screenspace_rect.center().x, 
+                        territory.screenspace_rect.center().y
+                    ),
+                    eguiVec2::new( 
+                        territory.screenspace_rect.size().x 
+                        - 2.0 * territory_settings.inner_margins.x 
+                        - territory_settings.spacing, 
+                        territory.screenspace_rect.size().y 
+                        - 2.0 * territory_settings.inner_margins.y 
+                        - territory_settings.spacing,
+                    )
                 );
 
-                egui::Window::new(territory_entity_id.index().to_string())
+                gizmos.rect_2d(
+                    territory.worldspace_rect.center(), 
+                    0.0,
+                    territory.worldspace_rect.size(),
+                    Color::BLUE
+                );
+                let territory_frame = egui::Frame::window(&eguiStyle::default())
+                    .shadow(Shadow::NONE)
+                    .inner_margin(territory_settings.inner_margins.x)
+                    ;
+
+                egui::Window::new(territory_entity.index().to_string())
                     .title_bar(false)
-                    .frame(egui::Frame {
-                        shadow: Shadow::NONE,
-                        ..Default::default()
-                    })
+                    .frame(territory_frame)
                     .pivot(Align2::CENTER_CENTER)
                     .default_rect(egui_territory_rect)
-                    .default_pos(egui_territory_rect_center)
+                    .current_pos(egui_territory_rect.center())
                     .show(context.get_mut(), |ui| {
                         ui.label("Blank Territory!");
-                        ui.allocate_space(ui.available_size());
-                        
+                        let response = ui.allocate_response(
+                            ui.available_size(), 
+                            egui::Sense::click_and_drag()
+                        );
+                        if response.drag_started() {
+                            let event_id = territory_drag_started.send(TerritoryDragStarted);
+                        }
+                        //let response = ui.interact(rect, id, egui::Sense::click_and_drag());
+                        if response.dragged() {
+                            let event_id = territory_dragged.send(TerritoryDragged { 
+                                window_entity: window_entity,
+                                dragged_entity: territory_entity,
+                                mouse_delta: Vec2::new(response.drag_delta().x, -1.0 * response.drag_delta().y)
+                            });
+                        }
+                        if response.drag_released() {
+                            let event_id = territory_drag_ended.send(TerritoryDragEnded);
+                        }
                     }
                 );
             }
