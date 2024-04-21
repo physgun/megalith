@@ -4,6 +4,7 @@ use bevy::window::*;
 use bevy::render::camera::*;
 
 use crate::components_ui::*;
+use crate::events_ui::*;
 use crate::input_manager::*;
 use crate::resources_ui::*;
 use crate::systems_common::*;
@@ -19,7 +20,7 @@ pub fn initialize_ui_resources (mut commands: Commands) {
     commands.init_resource::<WorldMousePosition>();
 }
 
-// Get the World Space coordinates of the mouse, 
+// Get the Screenspace / Worldspace coordinates of the mouse, 
 // and optionally the window / territory / tab it is in.
 // Runs all of the time. Why does everything need different coordinate systems??
 pub fn get_mouse_location(
@@ -30,38 +31,40 @@ pub fn get_mouse_location(
     // TODO: Tab query here later!
     mut gizmos: Gizmos
 ) {
+    // Reset mouse info so we don't keep around old data.
+    mouse_location_resource.window = None;
+    mouse_location_resource.territory = None;
+    mouse_location_resource.tab = None;
+
     for (camera, camera_transform) in & cameras_query {    
         for (entity_window, window) in & windows_query {
             match camera.target {
                 RenderTarget::Window(WindowRef::Entity(entity)) => {
                     if let Some(camera_mouse_position) = window.cursor_position()
-                        .and_then(|cursor| camera.viewport_to_world(camera_transform, cursor))
-                        .map(|ray| ray.origin.truncate()) {
+                        .and_then(|cursor| camera.viewport_to_world_2d(
+                            camera_transform, 
+                            cursor))
+                        .map(|ray| ray) {
 
-                        mouse_location_resource.pos = camera_mouse_position;
+                        mouse_location_resource.screenspace_pos = window.cursor_position().unwrap();
+                        mouse_location_resource.worldspace_pos = camera_mouse_position;
                         mouse_location_resource.window = Some(entity);
-
-                        gizmos.line_2d(Vec2::ZERO, mouse_location_resource.pos, Color::WHITE);
                         
                         for (entity_territory, parent, territory) in & territories_query {
-                            if parent.get() == entity && territory.rect.contains(mouse_location_resource.pos) {
+                            if parent.get() == entity 
+                                && territory.worldspace_rect.contains(mouse_location_resource.worldspace_pos) {
                                 mouse_location_resource.territory = Some(entity_territory);
                                 gizmos.rect_2d(
-                                    territory.rect.center(), 
+                                    territory.worldspace_rect.center(), 
                                     0.0, 
-                                    territory.rect.size().add(Vec2::new(10.0, 10.0)), 
+                                    territory.worldspace_rect.size().add(Vec2::new(10.0, 10.0)), 
                                     Color:: GOLD
                                 );
                             }
                         }
                     }
-                    else {
-                        mouse_location_resource.window = None;
-                        mouse_location_resource.territory = None;
-                        mouse_location_resource.tab = None;
-                    }
-                    }
-                _ => {}
+                }
+                _ => {warn!("No RenderTarget found for camera when getting mouse info!");}
             }
         }
     }
@@ -115,7 +118,55 @@ pub fn spawn_new_os_window(
     mut spawn_window_button_events: EventReader<SpawnWindowKeyJustPressed>
 ) {
     for event in spawn_window_button_events.read() {
-        commands.spawn(Window::default());
+        commands.spawn((
+            EntityName("[WINDOW] Test Spawn Window".to_string()),
+            Window::default(),
+            TerritoryTabsUI,
+            EguiDisplay
+        ));
+    }
+}
+
+// TerritoryTab state machine for MovingTabs.
+// For now the dev chord events trigger this. 
+pub fn territory_tabs_state_tab_move (
+    territory_tabs_current_state: Res<State<TerritoryTabsState>>,
+    mut territory_tabs_next_state: ResMut<NextState<TerritoryTabsState>>,
+    mut entered_moving_tabs_events: EventReader<TestChordJustPressed>,
+    mut exited_moving_tabs_events: EventReader<TestChordJustReleased>
+) {
+    for event in entered_moving_tabs_events.read() {
+        match territory_tabs_current_state.get() {
+            TerritoryTabsState::Natural => territory_tabs_next_state.set(TerritoryTabsState::MovingTabs),
+            _ => {warn!("[STATE] Failed Territory Tabs state: Natural -> MovingTabs");}
+        }
+    }
+    for event in exited_moving_tabs_events.read() {
+        match territory_tabs_current_state.get() {
+            TerritoryTabsState::MovingTabs => territory_tabs_next_state.set(TerritoryTabsState::Natural),
+            _ => {warn!("[STATE] Failed Territory Tabs state: MovingTabs -> Natural");}
+        }
+    }
+}
+
+// TerritoryTab state machine for DraggingTerritories.
+pub fn territory_tabs_state_drag_territories (
+    territory_tabs_current_state: Res<State<TerritoryTabsState>>,
+    mut territory_tabs_next_state: ResMut<NextState<TerritoryTabsState>>,
+    mut territory_drag_started_events: EventReader<TerritoryDragStarted>,
+    mut territory_drag_ended_events: EventReader<TerritoryDragEnded>
+) {
+    for event in territory_drag_started_events.read() {
+        match territory_tabs_current_state.get() {
+            TerritoryTabsState::Natural => territory_tabs_next_state.set(TerritoryTabsState::DraggingTerritories),
+            _ => {warn!("[STATE] Failed Territory Tabs state: Natural -> DraggingTerritories");}
+        }
+    }
+    for event in territory_drag_ended_events.read() {
+        match territory_tabs_current_state.get() {
+            TerritoryTabsState::DraggingTerritories => territory_tabs_next_state.set(TerritoryTabsState::Natural),
+            _ => {warn!("[STATE] Failed Territory Tabs state: DraggingTerritories -> Natural");}
+        }
     }
 }
 
@@ -167,69 +218,50 @@ pub fn setup_tab_move_placeholders(
     else {warn!("Mouse window not found at start of Tab Move! No placeholders spawned!");}
 }
 
-// TerritoryTab state machine. Is sent events to change state?
-// For now the dev chord events trigger this. 
-pub fn territory_tabs_state_change (
-    territory_tabs_current_state: Res<State<TerritoryTabsState>>,
-    mut territory_tabs_next_state: ResMut<NextState<TerritoryTabsState>>,
-    mut entered_moving_tabs_events: EventReader<TestChordJustPressed>,
-    mut exited_moving_tabs_events: EventReader<TestChordJustReleased>
-) {
-    for event in entered_moving_tabs_events.read() {
-        match territory_tabs_current_state.get() {
-            TerritoryTabsState::Natural => territory_tabs_next_state.set(TerritoryTabsState::MovingTabs),
-            _ => {warn!("Failed to switch Territory Tabs state to MovingTabs!");}
-        }
-    }
-    for event in exited_moving_tabs_events.read() {
-        match territory_tabs_current_state.get() {
-            TerritoryTabsState::MovingTabs => territory_tabs_next_state.set(TerritoryTabsState::Natural),
-            _ => {warn!("Failed to switch Territory Tabs state to Natural!");}
-        }
-    }
-}
-
-
-// See if the mouse has triggered any events while the tab move event is ongoing.
-// Subject to in_state run condition, only runs when a tab move is underway.
-// Move placeholders and update placeholder types if necessary.
+// See if the mouse has triggered any events for placeholders.
 
 // Check for the cursor leaving the window.
 // Despawn any TabMove and SpawnTerritory placeholders.
 pub fn check_placeholder_types_leaving_window (
     mut commands: Commands,
+    territory_tabs_current_state: Res<State<TerritoryTabsState>>,
     mut mouse_left_window_events: EventReader<CursorLeft>,
     mut placeholder_query: Query<(Entity, &mut Placeholder)>
 ) {
     for event in mouse_left_window_events.read() {
-        for (entity, placeholder) in &mut placeholder_query {
-            match placeholder.placeholder_type {
-                PlaceholderType::SpawnTerritory => {
-                    commands.entity(event.window).remove_children(&[entity]);
-                    commands.entity(entity).despawn();
-                    debug!("[CURSOR LEFT] Removed SpawnTerritory type placeholder!"); 
-                }
-                PlaceholderType::TabMove => {
-                    commands.entity(event.window).remove_children(&[entity]);
-                    commands.entity(entity).despawn();
-                    debug!("[CURSOR LEFT] Removed TabMove type placeholder!");
+        match territory_tabs_current_state.get() {
+            TerritoryTabsState::MovingTabs => {
+                for (entity, placeholder) in &mut placeholder_query {
+                    match placeholder.placeholder_type {
+                        PlaceholderType::SpawnTerritory => {
+                            commands.entity(event.window).remove_children(&[entity]);
+                            commands.entity(entity).despawn();
+                            debug!("[CURSOR LEFT] Removed SpawnTerritory type placeholder!"); 
+                        }
+                        PlaceholderType::TabMove => {
+                            commands.entity(event.window).remove_children(&[entity]);
+                            commands.entity(entity).despawn();
+                            debug!("[CURSOR LEFT] Removed TabMove type placeholder!");
 
-                } // TODO: Update to Tab's Territory instead of Window
-                PlaceholderType::SpawnWindow => {
-                    warn!("[CURSOR LEFT] SpawnWindow type placeholder found while mouse was still in a Window??"); 
-                    commands.entity(entity).despawn();
+                        } // TODO: Update to Tab's Territory instead of Window
+                        PlaceholderType::SpawnWindow => {
+                            warn!("[CURSOR LEFT] SpawnWindow type placeholder found while mouse was still in a Window??"); 
+                            commands.entity(entity).despawn();
+                        }
+                        _ => {} // Leave others alone.
+                    };
                 }
-                _ => {} // Leave others alone.
-            };
+                // Add a SpawnWindow placeholder.
+                commands.spawn((
+                    EntityName("[PLACEHOLDER] CursorLeft Event SpawnWindow".to_string()),
+                    CleanupOnMovingTabExit,
+                    Placeholder {placeholder_type: PlaceholderType::SpawnWindow, ..Default::default()},
+                    SpatialBundle::default(),
+                ));
+                debug!("[CURSOR LEFT] Spawned a SpawnWindow type placeholder!");
+            },
+            _ => {}
         }
-        // Add a SpawnWindow placeholder.
-        commands.spawn((
-            EntityName("[PLACEHOLDER] CursorLeft Event SpawnWindow".to_string()),
-            CleanupOnMovingTabExit,
-            Placeholder {placeholder_type: PlaceholderType::SpawnWindow, ..Default::default()},
-            SpatialBundle::default(),
-        ));
-        debug!("[CURSOR LEFT] Spawned a SpawnWindow type placeholder!");
     }
 }
 
@@ -237,89 +269,83 @@ pub fn check_placeholder_types_leaving_window (
 // Remove any SpawnWindow type placeholders.
 pub fn check_placeholder_types_entering_window (
     mut commands: Commands,
+    territory_tabs_current_state: Res<State<TerritoryTabsState>>,
     mut mouse_entered_window_events: EventReader<CursorEntered>,
     mut placeholder_query: Query<(Entity, &mut Placeholder)>
 ) {
     for event in mouse_entered_window_events.read() {
-        for (entity, placeholder) in &mut placeholder_query {
-            match placeholder.placeholder_type {
-                PlaceholderType::SpawnTerritory => {
-                    warn!("[CURSOR ENTERED] Removed SpawnTerritory type placeholder, found while not in a Window??");
-                    commands.entity(entity).despawn();
+        match territory_tabs_current_state.get() {
+            TerritoryTabsState::MovingTabs => {
+                for (entity, placeholder) in &mut placeholder_query {
+                    match placeholder.placeholder_type {
+                        PlaceholderType::SpawnTerritory => {
+                            warn!("[CURSOR ENTERED] Removed SpawnTerritory type placeholder, found while not in a Window??");
+                            commands.entity(entity).despawn();
+                        }
+                        PlaceholderType::TabMove => {
+                            warn!("[CURSOR ENTERED] Removed TabMove type placeholder, found while not in a Window??");
+                            commands.entity(entity).despawn();
+                        }
+                        PlaceholderType::SpawnWindow => {
+                            commands.entity(entity).despawn();
+                            debug!("[CURSOR ENTERED] Removed SpawnWindow type placeholder!");
+                        }
+                        _ => {} // Leave others alone.
+                    };
                 }
-                PlaceholderType::TabMove => {
-                    warn!("[CURSOR ENTERED] Removed TabMove type placeholder, found while not in a Window??");
-                    commands.entity(entity).despawn();
-                }
-                PlaceholderType::SpawnWindow => {
-                    commands.entity(entity).despawn();
-                    debug!("[CURSOR ENTERED] Removed SpawnWindow type placeholder!");
-                }
-                _ => {} // Leave others alone.
-            };
+
+                // Spawn a new child placeholder. SpawnTerritory type since calculate_placeholder_data will catch it.
+                let new_placeholder = commands.spawn((
+                    EntityName("[PLACEHOLDER] CursorEntered Event SpawnTerritory".to_string()),
+                    CleanupOnMovingTabExit,
+                    Placeholder {placeholder_type: PlaceholderType::SpawnTerritory, ..Default::default()},
+                    SpatialBundle::default()
+                ))  .id();
+                commands.entity(event.window).add_child(new_placeholder);
+                debug!("[CURSOR ENTERED] Spawned new placeholder of type SpawnTerritory");
+            },
+            _ => {}
         }
-        // Spawn a new child placeholder. SpawnTerritory type since calculate_placeholder_data will catch it.
-        let new_placeholder = commands.spawn((
-            EntityName("[PLACEHOLDER] CursorEntered Event SpawnTerritory".to_string()),
-            CleanupOnMovingTabExit,
-            Placeholder {placeholder_type: PlaceholderType::SpawnTerritory, ..Default::default()},
-            SpatialBundle::default()
-        ))  .id();
-        commands.entity(event.window).add_child(new_placeholder);
-        debug!("[CURSOR ENTERED] Spawned new placeholder of type SpawnTerritory");
     }
 }
 
 // Check for mouse movement in the Window we're in.
 // If so, see if we're in a Territory and change placeholder type.
-pub fn check_placeholder_types_on_mouse_move (
+pub fn check_placeholder_types_mouse_moving (
     mut commands: Commands,
     mouse_location_resource: Res<WorldMousePosition>,
     mut mouse_moved_in_window_events: EventReader<CursorMoved>,
-    mut placeholder_query: Query<(Entity, &mut Placeholder)>,
-    territory_query: Query<(&Parent, &Territory)>
+    mut placeholder_query: Query<(Entity, &mut Placeholder)>
 ) {
     for event in mouse_moved_in_window_events.read() {
-        for (parent, territory) in & territory_query {
-            let territory_window = parent.get();
-            if territory_window == event.window && territory.rect.contains(mouse_location_resource.pos) {
-                for (entity, mut placeholder) in &mut placeholder_query {
-                    match placeholder.placeholder_type {
-                        PlaceholderType::SpawnTerritory => {
-                            placeholder.placeholder_type = PlaceholderType::TabMove;
-                            debug!("[CURSOR MOVED] Changed placeholder type from SpawnTerritory to TabMove!");
-                        }// TODO: Move child into Territory's children.
-                        PlaceholderType::TabMove => {}
-                        PlaceholderType::SpawnWindow => {
-                            warn!("[CURSOR MOVED] SpawnWindow type placeholder found inside of a Window??");
-                            commands.entity(entity).despawn();
-                        }
-                        _ => {} // Leave others alone.
-                    };
-                }
-            }
-            else {
-                for (entity, mut placeholder) in &mut placeholder_query {
-                    match placeholder.placeholder_type {
-                        PlaceholderType::SpawnTerritory => {}
-                        PlaceholderType::TabMove => {
-                            placeholder.placeholder_type = PlaceholderType::SpawnTerritory;
-                            debug!("[CURSOR MOVED] Changed placeholder type from TabMove to SpawnTerritory!");
-                        }
-                        PlaceholderType::SpawnWindow => {
-                            warn!("[CURSOR MOVED] SpawnWindow type placeholder found inside of a Window??");
-                            commands.entity(entity).despawn();}
-                        _ => {} // Leave others alone.
-                    };
-                }
-            }
+        for (placeholder_entity, mut placeholder) in &mut placeholder_query {
+            match placeholder.placeholder_type {
+                PlaceholderType::SpawnTerritory => {
+                    if let Some(territory_entity) = mouse_location_resource.territory {
+                        placeholder.placeholder_type = PlaceholderType::TabMove;
+                        debug!("[CURSOR MOVED] Changed placeholder type from SpawnTerritory to TabMove!");
+                    }
+                },
+                PlaceholderType::TabMove => {
+                    if mouse_location_resource.territory == None {
+                        placeholder.placeholder_type = PlaceholderType::SpawnTerritory;
+                        debug!("[CURSOR MOVED] Changed placeholder type from TabMove to SpawnTerritory!");
+                    }
+                },
+                PlaceholderType::SpawnWindow => {
+                    warn!("[CURSOR MOVED] SpawnWindow type placeholder found inside of a Window??");
+                    commands.entity(placeholder_entity).despawn();
+                },
+                PlaceholderType::TabOrigin => {},
+                _ => {warn!("[CURSOR MOVED] Unusual placeholder type found!");}
+            };
         }
     }
 }
 
-// With the tab movement state ongoing, check for mouse movement.
+// With any non-Natural states ongoing, check for mouse movement.
 // Calculate the visual_rects of the placeholders and determine spawn validity.
-// Subject to on_event run condition, only runs when a tab move is underway.
+// Subject to on_event run condition, only runs when not in the Natural state.
 pub fn calculate_placeholder_data(
     mut gizmos: Gizmos,
     mouse_location_resource: Res<WorldMousePosition>,
@@ -331,7 +357,7 @@ pub fn calculate_placeholder_data(
 ) {
     for event in mouse_moved_in_window_events.read() {
         if let Ok(window) = window_query.get(event.window) {
-            // Get the event window's size for later. World coordinates!
+            // Get the event window's size for later.
             let window_rect = Rect::from_center_size(
                 Vec2::new(0.0, 0.0),
                 Vec2::new(window.width(), window.height())
@@ -340,63 +366,52 @@ pub fn calculate_placeholder_data(
                 match placeholder.placeholder_type {
                     PlaceholderType::SpawnTerritory => {
                         // Get upper left coord. Adjust slightly for tab_offsets.
-                        // World coordinates!
-                        let upper_left = Vec2::new(
-                            mouse_location_resource.pos.x - territory_settings.tab_offset.x,
-                            mouse_location_resource.pos.y + territory_settings.tab_offset.y
+                        let worldspace_upper_left = Vec2::new(
+                            mouse_location_resource.worldspace_pos.x - territory_settings.inner_margins.x,
+                            mouse_location_resource.worldspace_pos.y + territory_settings.inner_margins.y
                         );
 
                         // Get the initial minimum and default territory rects.
-                        let mut proposed_rects = vec![
+                        let mut proposed_worldspace_rects = vec![
                             Rect::from_corners(
-                                upper_left, 
+                                worldspace_upper_left, 
                                 Vec2::new(
-                                    upper_left.x + territory_settings.min_size.x,
-                                    upper_left.y - territory_settings.min_size.y
+                                    worldspace_upper_left.x + territory_settings.min_size.x,
+                                    worldspace_upper_left.y - territory_settings.min_size.y
                                 )
                             ),
                             Rect::from_corners(
-                                upper_left, 
+                                worldspace_upper_left, 
                                 Vec2::new(
-                                    upper_left.x + territory_settings.default_size.x,
-                                    upper_left.y - territory_settings.default_size.y
+                                    worldspace_upper_left.x + territory_settings.default_size.x,
+                                    worldspace_upper_left.y - territory_settings.default_size.y
                                 )
                             )];
 
                         // Clip off anything outside the window.
-                        proposed_rects[1] = window_rect.intersect(proposed_rects[1]);
+                        proposed_worldspace_rects[1] = window_rect.intersect(proposed_worldspace_rects[1]);
 
                         // Intersecting territories clip off pieces of our initial default rect too.
                         for (parent, territory) in &territory_query {
-                            let territory_conflict = proposed_rects[1].intersect(territory.rect);
+                            let territory_conflict = proposed_worldspace_rects[1].intersect(territory.worldspace_rect);
                             let territory_window = parent.get();
                             if territory_window == event.window && !territory_conflict.is_empty() {
-                                gizmos.rect_2d(
-                                    territory_conflict.center(), 
-                                    0.0,
-                                    territory_conflict.size(),
-                                    Color::RED
-                                );
                             
-                                let conflict_angle = (upper_left.y - territory.rect.center().y)
-                                    .atan2(upper_left.x - territory.rect.center().x);
+                                let conflict_angle = (worldspace_upper_left.y - territory.worldspace_rect.center().y)
+                                    .atan2(worldspace_upper_left.x - territory.worldspace_rect.center().x);
 
                                 if conflict_angle <= FRAC_PI_4 && conflict_angle >= -FRAC_PI_4 {
-                                    proposed_rects[1].min.x += territory_conflict.width();
-                                    gizmos.line_2d(territory.rect.center(), upper_left, Color::GREEN);
+                                    proposed_worldspace_rects[1].min.x += territory_conflict.width();
                                 } 
                                 else if conflict_angle >= FRAC_PI_4 && conflict_angle <= 3.0 * FRAC_PI_4 {
-                                    proposed_rects[1].min.y += territory_conflict.height();
-                                    gizmos.line_2d(territory.rect.center(), upper_left, Color::BLUE);
+                                    proposed_worldspace_rects[1].min.y += territory_conflict.height();
                                 }
                                 else if (conflict_angle >= 3.0 * FRAC_PI_4 && conflict_angle <= PI)
                                     || (conflict_angle >= -PI && conflict_angle <= -3.0 * FRAC_PI_4) {
-                                    proposed_rects[1].max.x -= territory_conflict.width();
-                                    gizmos.line_2d(territory.rect.center(), upper_left, Color::YELLOW);
+                                    proposed_worldspace_rects[1].max.x -= territory_conflict.width();
                                 }
                                 else if conflict_angle >= -3.0 * FRAC_PI_4 && conflict_angle <= -FRAC_PI_4 {
-                                    proposed_rects[1].max.y -= territory_conflict.height();
-                                    gizmos.line_2d(territory.rect.center(), upper_left, Color::RED);
+                                    proposed_worldspace_rects[1].max.y -= territory_conflict.height();
                                 }
                                 else{
                                     warn!{"Unusual conflict angle found during placeholder calculations!"}
@@ -405,9 +420,10 @@ pub fn calculate_placeholder_data(
                         }
                         // If the minimum still fits inside the clipped default, we're good to spawn.
                         // If not, ignore this frame's data to keep the last valid data.
-                        if proposed_rects[1].contains(proposed_rects[0].min) 
-                        && proposed_rects[1].contains(proposed_rects[0].max) {
-                            placeholder.visual_rects = proposed_rects;
+                        if proposed_worldspace_rects[1].contains(proposed_worldspace_rects[0].min) 
+                        && proposed_worldspace_rects[1].contains(proposed_worldspace_rects[0].max) {
+                            placeholder.worldspace_visual_rects = proposed_worldspace_rects;
+                            placeholder.world_to_screen(window.width(), window.height());
                             placeholder.valid_spawn = true;
                         }
                         
@@ -428,17 +444,18 @@ pub fn activate_placeholders (
     mouse_location_resource: Res<WorldMousePosition>,
     placeholders_query: Query<(Entity, Option<&Parent>, &Placeholder)>
 ) {
-    for (entity, parent, placeholder) in & placeholders_query {
+    for (entity, placeholder_parent, placeholder) in & placeholders_query {
         match placeholder.placeholder_type {
             PlaceholderType::SpawnTerritory => {
-                if let Some(territory_parent) = parent {
+                if let Some(territory_parent) = placeholder_parent {
                     if placeholder.valid_spawn {
                         if let Some(mouse_window) = mouse_location_resource.window { 
                             let new_territory = commands.spawn((
                                 EntityName("[TERRITORY] Spawned By Placeholder".to_string()),
                                 CleanupOnWindowClose,
                                 Territory {
-                                    rect: placeholder.visual_rects[1],
+                                    screenspace_rect: placeholder.screenspace_visual_rects[1],
+                                    worldspace_rect: placeholder.worldspace_visual_rects[1],
                                     ..Default::default()
                                 },
                                 SpatialBundle::default(),
@@ -469,51 +486,103 @@ pub fn activate_placeholders (
     }
 }
 
-// With tab movement state just exited, use the placeholders to figure out what needs to be done.
-// Then, despawn them.
-// TODO: This needs a serious rework. What happens when no valid spawns?
-pub fn initiate_placeholders(
-    mut commands: Commands,
-    mut tab_move_ended_events: EventReader<TestChordJustReleased>,
-    territory_query: Query<(&Parent, &Territory)>,
-    mut placeholder_query: Query<(Entity, &mut Placeholder)>,
+// Read Territory drag event and update territory position.
+pub fn determine_territory_drag_position (
+    mut territory_dragged_events: EventReader<TerritoryDragged>,
+    window_query: Query<(Entity, &Window)>,
+    mut territory_query: Query<(Entity, &mut Territory)>
 ) {
-    for event in tab_move_ended_events.read() {
-        for (entity, mut placeholder) in &mut placeholder_query{
-            match placeholder.placeholder_type {
-                PlaceholderType::SpawnTerritory => {
-                    if placeholder.valid_spawn {
-                        let new_territory = commands.spawn((
-                            Territory {
-                                rect: placeholder.visual_rects[1],
-                                ..Default::default()
-                                },
-                            SpatialBundle::default(),
-                            EguiDisplay // Display Territory with egui.
-                        ))  .id();
-                        commands.entity(event.0).add_child(new_territory);
-                        info!("Territory spawned!");
-                    }
-                    commands.entity(entity).despawn();
-                    debug!("Placeholder of type SpawnTerritory despawned!");
+    for event in territory_dragged_events.read() {
+        for (window_entity, window) in & window_query {
+            for (territory_entity, mut territory) in &mut territory_query {
+                if territory_entity == event.dragged_entity && event.window_entity == window_entity{
+                    territory.worldspace_rect = Rect::from_center_size(
+                        territory.worldspace_rect.center().add(event.mouse_delta),
+                        territory.worldspace_rect.size()
+                    );
+                    territory.world_to_screen(window.width(), window.height())
                 }
-                PlaceholderType::TabMove => {
-                    commands.entity(entity).despawn();
-                    debug!("Placeholder of type TabMove despawned!");
+            }
+        }
+    }
+}
+
+// Detect Territory collisions during Territory drag state and update position.
+// Window edge collision will be a separate system due to the query mutable borrow mess I made.
+pub fn check_territory_drag_collision (
+    mut territory_dragged_events: EventReader<TerritoryDragged>,
+    window_query: Query<&Window>,
+    mut territory_query: Query<(Entity, &mut Territory)>
+) {
+    for event in territory_dragged_events.read() {
+        if let Ok(window) = window_query.get(event.window_entity) {
+            let mut territory_combinations = territory_query
+                .iter_combinations_mut();
+            while let Some([
+                (territory_a_entity, mut territory_a),
+                (territory_b_entity, mut territory_b)
+                ]) = territory_combinations.fetch_next() {
+
+                if territory_a_entity == event.dragged_entity {
+                    territory_a.world_drag_collision(territory_b.worldspace_rect);
+                    territory_a.world_to_screen(window.width(), window.height());
+                } 
+                if territory_b_entity == event.dragged_entity {
+                    territory_b.world_drag_collision(territory_a.worldspace_rect);
+                    territory_b.world_to_screen(window.width(), window.height());
+                } 
+            }
+        }
+    }
+}
+
+// Detect Territory bumping up against the window edge. Don't let it out!
+// Note that egui will constrain its windows inside our windows even without this.
+// However, we want TerritoryTabs logic decoupled from any display libraries.
+pub fn check_window_drag_collision (
+    mut territory_dragged_events: EventReader<TerritoryDragged>,
+    window_query: Query<&Window>,
+    mut territory_query: Query<&mut Territory>
+) {
+    for event in territory_dragged_events.read() {
+        if let Ok(window) = window_query.get(event.window_entity) {
+            if let Ok(mut territory) = territory_query.get_mut(event.dragged_entity) {
+                let window_rect = Rect::from_center_size(
+                    Vec2::new(0.0, 0.0), 
+                    Vec2::new(window.width(),window.height())
+                );
+                if window_rect.contains(territory.worldspace_rect.min)
+                && window_rect.contains(territory.worldspace_rect.max) {continue;}
+
+                if territory.worldspace_rect.min.x < window_rect.min.x {
+                    let delta_x = window_rect.min.x - territory.worldspace_rect.min.x;
+                    territory.move_worldspace_pos(
+                        delta_x,
+                        0.0
+                    );
                 }
-                PlaceholderType::TabOrigin => {
-                    commands.entity(entity).despawn();
-                    debug!("Placeholder of type TabOrigin despawned!");
+                if territory.worldspace_rect.min.y < window_rect.min.y {
+                    let delta_y = window_rect.min.y - territory.worldspace_rect.min.y;
+                    territory.move_worldspace_pos(
+                        0.0,
+                        delta_y
+                    );
                 }
-                PlaceholderType::LoadLayout => {
-                    commands.entity(entity).despawn();
-                    debug!("Placeholder of type LoadLayout despawned!");
+                if territory.worldspace_rect.max.x > window_rect.max.x {
+                    let delta_x = window_rect.max.x - territory.worldspace_rect.max.x;
+                    territory.move_worldspace_pos(
+                        delta_x,
+                        0.0
+                    );
                 }
-                PlaceholderType::SpawnWindow => {
-                    commands.entity(entity).despawn();
-                    debug!("Placeholder of type SpawnWindow despawned!");
+                if territory.worldspace_rect.max.y > window_rect.max.y {
+                    let delta_y = window_rect.max.y - territory.worldspace_rect.max.y;
+                    territory.move_worldspace_pos(
+                        0.0,
+                        delta_y
+                    );
                 }
-                _ => {}
+                territory.world_to_screen(window.width(), window.height());
             }
         }
     }
