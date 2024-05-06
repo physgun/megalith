@@ -38,6 +38,12 @@ pub mod ui {
     pub struct UpdateUITerritoryDrag;
 
     #[derive(SystemSet, Debug, Hash, PartialEq, Eq, Clone)]
+    pub struct UpdateUITerritoryResize;
+
+    #[derive(SystemSet, Debug, Hash, PartialEq, Eq, Clone)]
+    pub struct UpdateUIStateBehavior;
+
+    #[derive(SystemSet, Debug, Hash, PartialEq, Eq, Clone)]
     pub struct UpdateUIDisplay;
 
     #[derive(SystemSet, Debug, Hash, PartialEq, Eq, Clone)]
@@ -59,6 +65,9 @@ pub mod ui {
                 .add_event::<TerritoryDragStarted>()
                 .add_event::<TerritoryDragged>()
                 .add_event::<TerritoryDragEnded>()
+                .add_event::<TerritoryResizeStarted>()
+                .add_event::<TerritoryResizing>()
+                .add_event::<TerritoryResizeEnded>()
 
                 .add_event::<TestChordJustPressed>()
                 .add_event::<TestChordPressed>()
@@ -78,17 +87,24 @@ pub mod ui {
                     cleanup_all_entities_with::<CleanupOnMovingTabExit>
                 ))
 
+                .add_systems(OnEnter(TerritoryTabsState::DraggingTerritories),
+                    find_mouse_territory_interact_pos)
+
                 // System Sets: Update
                 .add_systems(Update, (
-                    (
-                        territory_tabs_state_drag_territories,
-                        territory_tabs_state_tab_move
-                    ).in_set(UpdateUIStateChanges),
+                    // Event Producers
                     (
                         test_spawn_window,
                         test_chord_pressed,
                         get_mouse_location
                     ).in_set(UpdateUIInput),
+                    (
+                        display_territories_with_egui
+                            .before(display_placeholders_with_egui),
+                        display_placeholders_with_egui
+                    ).in_set(UpdateUIDisplay),
+
+                    // Event Consumers
                     (
                         spawn_new_os_window
                             .before(configure_os_window),
@@ -96,62 +112,67 @@ pub mod ui {
                             .run_if(on_event::<WindowCreated>())
                     ).in_set(UpdateUIWindowManagement),
                     (
-                        check_placeholder_types_leaving_window
-                            .run_if(on_event::<CursorLeft>())
-                            .before(check_placeholder_types_entering_window),
-                        check_placeholder_types_entering_window
-                            .run_if(on_event::<CursorEntered>())
-                            .before(check_placeholder_types_mouse_moving),
-                        check_placeholder_types_mouse_moving
-                            .run_if(on_event::<CursorMoved>())
-                            .before(calculate_placeholder_data),
-                        calculate_placeholder_data
-                            .run_if(on_event::<CursorMoved>())
-                    ).in_set(UpdateUIPlaceholderManagement),
+                        (
+                            check_placeholder_types_leaving_window
+                                .run_if(on_event::<CursorLeft>())
+                                .before(check_placeholder_types_entering_window),
+                            check_placeholder_types_entering_window
+                                .run_if(on_event::<CursorEntered>())
+                                .before(check_placeholder_types_mouse_moving),
+                            check_placeholder_types_mouse_moving
+                                .run_if(on_event::<CursorMoved>())
+                                .before(calculate_placeholder_data),
+                            calculate_placeholder_data
+                                .run_if(on_event::<CursorMoved>())
+                        ).in_set(UpdateUIPlaceholderManagement),
+                        (
+                            determine_territory_drag_position
+                                .run_if(on_event::<TerritoryDragged>())
+                                .before(check_territory_drag_collision),
+                            check_territory_drag_collision
+                                .run_if(on_event::<TerritoryDragged>())
+                                .before(check_window_drag_collision),
+                            check_window_drag_collision
+                                .run_if(on_event::<TerritoryDragged>())
+                        ).in_set(UpdateUITerritoryDrag),
+                        (
+                            determine_territory_resize_boundaries
+                                .run_if(on_event::<TerritoryResizing>())
+                                //.before(apply_valid_territory_resize),
+                            //apply_valid_territory_resize
+                            //    .run_if(on_event::<TerritoryResizing>()),
+                        ).in_set(UpdateUITerritoryResize)
+                    ).in_set(UpdateUIStateBehavior),
                     (
-                        determine_territory_drag_position
-                            .run_if(on_event::<TerritoryDragged>())
-                            .before(check_territory_drag_collision),
-                        check_territory_drag_collision
-                            .run_if(on_event::<TerritoryDragged>())
-                            .before(check_window_drag_collision),
-                        check_window_drag_collision
-                            .run_if(on_event::<TerritoryDragged>()),
-                    ).in_set(UpdateUITerritoryDrag),
+                        display_debug_gizmos,
+                        display_debug_info_with_egui
+                    ).in_set(UpdateUIDebug),
                     (
-                        egui_display_territories
-                            .before(display_placeholders),
-                        display_placeholders
-                    ).in_set(UpdateUIDisplay),
-                    (
-                        display_debug_info
-                    ).in_set(UpdateUIDebug)
+                        territory_tabs_main_state_exit
+                            .before(territory_tabs_main_state_enter),
+                        territory_tabs_main_state_enter
+                    ).in_set(UpdateUIStateChanges)
                 ))
 
                 // Set Config: Update
                 .configure_sets(Update, (
                     (
-                        UpdateUIInput
-                            .before(UpdateUIWindowManagement),
-                        UpdateUIWindowManagement
-                            .before(UpdateUIPlaceholderManagement)
-                    ),
-                    (
-                        UpdateUIPlaceholderManagement
-                            .run_if(not(in_state(TerritoryTabsState::Natural)))
-                    ),
-                    (
-                        UpdateUIPlaceholderManagement
-                            .before(UpdateUIDisplay)
-                    ),
-                    (
-                        UpdateUITerritoryDrag
-                            .run_if(in_state(TerritoryTabsState::DraggingTerritories))
-                            .before(UpdateUIDisplay)
-                    ),
+                        UpdateUIInput,
+                    ).before(UpdateUIDisplay),
                     (
                         UpdateUIDisplay
-                            .before(UpdateUIDebug)
+                    ).before(UpdateUIWindowManagement),
+                    (
+                        UpdateUIWindowManagement,
+                    ).before(UpdateUIStateBehavior),
+                    (
+                        UpdateUIStateBehavior
+                    ).before(UpdateUIDebug),
+                    (
+                        UpdateUIDebug
+                    ).before(UpdateUIStateChanges),
+                    (
+                        UpdateUIStateChanges
                     )
                 ))
 
