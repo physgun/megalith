@@ -2,6 +2,14 @@ Supposed to be an unreinforced masonry CAD program, but I guess I'm doing UI stu
 
 Applying some lessons I learned when seeing tradespeople interact with increasingly complex software (and their increasingly complex UI), I've come up with a **Territory Tabs** UI design that should be easier to work with while still being flexible enough for CAD software.
 
-Only have basic Territory collisions so far.
+Basic Territory collisions and resizing.
 
 
+
+
+## License
+
+This work is dual-licensed under Apache 2.0 and MIT.
+You can choose between one of them if you use this work.
+
+`SPDX-License-Identifier: Apache-2.0 OR MIT`
