@@ -17,7 +17,23 @@ use std::ops::{Add, Sub};
 // Load in all the ui stuff.
 pub fn initialize_ui_resources (mut commands: Commands) {
     commands.init_resource::<TerritorySettings>();
+    commands.init_resource::<TabSettings>();
     commands.init_resource::<WorldMousePosition>();
+}
+
+// Debug system displaying all the gizmos
+pub fn display_debug_gizmos (
+    mut gizmos: Gizmos,
+    territory_query: Query<&Territory>
+) {
+    for territory in & territory_query {
+        gizmos.rect_2d(
+            territory.worldspace_rect().center(), 
+            0.0,
+            territory.worldspace_rect().size(),
+            Color::BLUE
+        );
+    }
 }
 
 // Get the Screenspace / Worldspace coordinates of the mouse, 
@@ -29,9 +45,9 @@ pub fn get_mouse_location(
     windows_query: Query<(Entity, &Window)>,
     territories_query: Query<(Entity, &Parent, &Territory)>,
     // TODO: Tab query here later!
-    mut gizmos: Gizmos
 ) {
     // Reset mouse info so we don't keep around old data.
+    // TODO: Move mouse info from resource to events
     mouse_location_resource.window = None;
     mouse_location_resource.territory = None;
     mouse_location_resource.tab = None;
@@ -52,14 +68,8 @@ pub fn get_mouse_location(
                         
                         for (entity_territory, parent, territory) in & territories_query {
                             if parent.get() == entity 
-                                && territory.worldspace_rect.contains(mouse_location_resource.worldspace_pos) {
+                                && territory.worldspace_rect().contains(mouse_location_resource.worldspace_pos) {
                                 mouse_location_resource.territory = Some(entity_territory);
-                                gizmos.rect_2d(
-                                    territory.worldspace_rect.center(), 
-                                    0.0, 
-                                    territory.worldspace_rect.size().add(Vec2::new(10.0, 10.0)), 
-                                    Color:: GOLD
-                                );
                             }
                         }
                     }
@@ -127,45 +137,58 @@ pub fn spawn_new_os_window(
     }
 }
 
-// TerritoryTab state machine for MovingTabs.
-// For now the dev chord events trigger this. 
-pub fn territory_tabs_state_tab_move (
+// TerritoryTabs operating state machine handling exit events first.
+pub fn territory_tabs_main_state_exit (
     territory_tabs_current_state: Res<State<TerritoryTabsState>>,
     mut territory_tabs_next_state: ResMut<NextState<TerritoryTabsState>>,
-    mut entered_moving_tabs_events: EventReader<TestChordJustPressed>,
-    mut exited_moving_tabs_events: EventReader<TestChordJustReleased>
+    mut territory_move_tab_exit_events: EventReader<TestChordJustReleased>,
+    mut territory_drag_ended_events: EventReader<TerritoryDragEnded>,
+    mut territory_resize_ended_events: EventReader<TerritoryResizeEnded>
 ) {
-    for event in entered_moving_tabs_events.read() {
-        match territory_tabs_current_state.get() {
-            TerritoryTabsState::Natural => territory_tabs_next_state.set(TerritoryTabsState::MovingTabs),
-            _ => {warn!("[STATE] Failed Territory Tabs state: Natural -> MovingTabs");}
-        }
-    }
-    for event in exited_moving_tabs_events.read() {
+    for event in territory_move_tab_exit_events.read() {
         match territory_tabs_current_state.get() {
             TerritoryTabsState::MovingTabs => territory_tabs_next_state.set(TerritoryTabsState::Natural),
-            _ => {warn!("[STATE] Failed Territory Tabs state: MovingTabs -> Natural");}
-        }
-    }
-}
-
-// TerritoryTab state machine for DraggingTerritories.
-pub fn territory_tabs_state_drag_territories (
-    territory_tabs_current_state: Res<State<TerritoryTabsState>>,
-    mut territory_tabs_next_state: ResMut<NextState<TerritoryTabsState>>,
-    mut territory_drag_started_events: EventReader<TerritoryDragStarted>,
-    mut territory_drag_ended_events: EventReader<TerritoryDragEnded>
-) {
-    for event in territory_drag_started_events.read() {
-        match territory_tabs_current_state.get() {
-            TerritoryTabsState::Natural => territory_tabs_next_state.set(TerritoryTabsState::DraggingTerritories),
-            _ => {warn!("[STATE] Failed Territory Tabs state: Natural -> DraggingTerritories");}
+            _ => {warn!("[MAIN STATE] Invalid transition: {:?} -> Natural", territory_tabs_current_state.get());}
         }
     }
     for event in territory_drag_ended_events.read() {
         match territory_tabs_current_state.get() {
             TerritoryTabsState::DraggingTerritories => territory_tabs_next_state.set(TerritoryTabsState::Natural),
-            _ => {warn!("[STATE] Failed Territory Tabs state: DraggingTerritories -> Natural");}
+            _ => {warn!("[MAIN STATE] Invalid transition: {:?} -> Natural", territory_tabs_current_state.get());}
+        }
+    }
+    for event in territory_resize_ended_events.read() {
+        match territory_tabs_current_state.get() {
+            TerritoryTabsState::ResizingTerritories => territory_tabs_next_state.set(TerritoryTabsState::Natural),
+            _ => {warn!("[MAIN STATE] Invalid transition: {:?} -> Natural", territory_tabs_current_state.get());}
+        }
+    }
+}
+
+// TerritoryTabs operation state machine handling enter events after.
+pub fn territory_tabs_main_state_enter (
+    territory_tabs_current_state: Res<State<TerritoryTabsState>>,
+    mut territory_tabs_next_state: ResMut<NextState<TerritoryTabsState>>,
+    mut territory_move_tab_enter_events: EventReader<TestChordJustPressed>,
+    mut territory_drag_started_events: EventReader<TerritoryDragStarted>,
+    mut territory_resize_started_events: EventReader<TerritoryResizeStarted>
+) {
+    for event in territory_move_tab_enter_events.read() {
+        match territory_tabs_current_state.get() {
+            TerritoryTabsState::Natural => territory_tabs_next_state.set(TerritoryTabsState::MovingTabs),
+            _ => {warn!("[MAIN STATE] Invalid transition: {:?} -> MovingTabs", territory_tabs_current_state.get());}
+        }
+    }
+    for event in territory_drag_started_events.read() {
+        match territory_tabs_current_state.get() {
+            TerritoryTabsState::Natural => territory_tabs_next_state.set(TerritoryTabsState::DraggingTerritories),
+            _ => {warn!("[MAIN STATE] Invalid transition: {:?} -> DraggingTerritories", territory_tabs_current_state.get());}
+        }
+    }
+    for event in territory_resize_started_events.read() {
+        match territory_tabs_current_state.get() {
+            TerritoryTabsState::Natural => territory_tabs_next_state.set(TerritoryTabsState::ResizingTerritories),
+            _ => {warn!("[MAIN STATE] Invalid transition: {:?} -> ResizingTerritories", territory_tabs_current_state.get());}
         }
     }
 }
@@ -393,12 +416,12 @@ pub fn calculate_placeholder_data(
 
                         // Intersecting territories clip off pieces of our initial default rect too.
                         for (parent, territory) in &territory_query {
-                            let territory_conflict = proposed_worldspace_rects[1].intersect(territory.worldspace_rect);
+                            let territory_conflict = proposed_worldspace_rects[1].intersect(territory.worldspace_rect());
                             let territory_window = parent.get();
                             if territory_window == event.window && !territory_conflict.is_empty() {
                             
-                                let conflict_angle = (worldspace_upper_left.y - territory.worldspace_rect.center().y)
-                                    .atan2(worldspace_upper_left.x - territory.worldspace_rect.center().x);
+                                let conflict_angle = (worldspace_upper_left.y - territory.worldspace_rect().center().y)
+                                    .atan2(worldspace_upper_left.x - territory.worldspace_rect().center().x);
 
                                 if conflict_angle <= FRAC_PI_4 && conflict_angle >= -FRAC_PI_4 {
                                     proposed_worldspace_rects[1].min.x += territory_conflict.width();
@@ -450,17 +473,19 @@ pub fn activate_placeholders (
                 if let Some(territory_parent) = placeholder_parent {
                     if placeholder.valid_spawn {
                         if let Some(mouse_window) = mouse_location_resource.window { 
-                            let new_territory = commands.spawn((
+                            let new_territory_id = commands.spawn((
                                 EntityName("[TERRITORY] Spawned By Placeholder".to_string()),
                                 CleanupOnWindowClose,
-                                Territory {
-                                    screenspace_rect: placeholder.screenspace_visual_rects[1],
-                                    worldspace_rect: placeholder.worldspace_visual_rects[1],
-                                    ..Default::default()
-                                },
+                                Territory::new(
+                                    placeholder.screenspace_visual_rects[1],
+                                    placeholder.worldspace_visual_rects[1],
+                                    Orientation::Vertical,
+                                    false,
+                                    false
+                                ),
                                 SpatialBundle::default(),
                             ))  .id();
-                            commands.entity(mouse_window).add_child(new_territory);
+                            commands.entity(mouse_window).add_child(new_territory_id);
                         }
                         else {warn!("Attempted to activate SpawnTerritory, but no mouse window found!");}
                     }
@@ -486,6 +511,31 @@ pub fn activate_placeholders (
     }
 }
 
+// On the start of a territory drag, 
+// Find the **worldspace** mouse position relative to `Territory.worldspace_rect.center()`
+pub fn find_mouse_territory_interact_pos (
+    mut mouse_location_resource: ResMut<WorldMousePosition>,
+    window_query: Query<&Window>,
+    territory_query: Query<&Territory>
+) {
+    if let Some(window_entity) = mouse_location_resource.window {
+        if let Ok(window) = window_query.get(window_entity) {
+            if let Some(territory_entity) = mouse_location_resource.territory {
+                if let Ok(territory) = territory_query.get(territory_entity) {
+                    let worldspace_interaction_pos = mouse_location_resource.worldspace_pos
+                        .sub(territory.worldspace_rect().center());
+                    mouse_location_resource.interaction_pos = worldspace_interaction_pos;
+                    return;
+                }
+                warn!("[TERRITORY DRAG START] Unable to get territory from query!");
+            }
+            warn!("[TERRITORY DRAG START] Mouse resource had no territory!");
+        }
+        warn!("[TERRITORY DRAG START] Unable to get window from query!");
+    }
+    warn!("[TERRITORY DRAG START] Mouse resource had no window!");
+}
+
 // Read Territory drag event and update territory position.
 pub fn determine_territory_drag_position (
     mut territory_dragged_events: EventReader<TerritoryDragged>,
@@ -495,12 +545,14 @@ pub fn determine_territory_drag_position (
     for event in territory_dragged_events.read() {
         for (window_entity, window) in & window_query {
             for (territory_entity, mut territory) in &mut territory_query {
-                if territory_entity == event.dragged_entity && event.window_entity == window_entity{
-                    territory.worldspace_rect = Rect::from_center_size(
-                        territory.worldspace_rect.center().add(event.mouse_delta),
-                        territory.worldspace_rect.size()
-                    );
-                    territory.world_to_screen(window.width(), window.height())
+                if territory_entity == event.territory_entity && event.window_entity == window_entity{
+                    let new_rect = Rect::from_center_size(
+                        territory.worldspace_rect().center().add(event.mouse_delta),
+                        territory.worldspace_rect().size()
+                        );
+                    territory
+                        .set_worldspace_rect(new_rect)
+                        .world_to_screen(window.width(), window.height());
                 }
             }
         }
@@ -523,13 +575,15 @@ pub fn check_territory_drag_collision (
                 (territory_b_entity, mut territory_b)
                 ]) = territory_combinations.fetch_next() {
 
-                if territory_a_entity == event.dragged_entity {
-                    territory_a.world_drag_collision(territory_b.worldspace_rect);
-                    territory_a.world_to_screen(window.width(), window.height());
+                if territory_a_entity == event.territory_entity {
+                    territory_a
+                        .apply_worldspace_drag_collision_with(territory_b.worldspace_rect())
+                        .world_to_screen(window.width(), window.height());
                 } 
-                if territory_b_entity == event.dragged_entity {
-                    territory_b.world_drag_collision(territory_a.worldspace_rect);
-                    territory_b.world_to_screen(window.width(), window.height());
+                if territory_b_entity == event.territory_entity {
+                    territory_b
+                        .apply_worldspace_drag_collision_with(territory_a.worldspace_rect())
+                        .world_to_screen(window.width(), window.height());
                 } 
             }
         }
@@ -546,43 +600,258 @@ pub fn check_window_drag_collision (
 ) {
     for event in territory_dragged_events.read() {
         if let Ok(window) = window_query.get(event.window_entity) {
-            if let Ok(mut territory) = territory_query.get_mut(event.dragged_entity) {
+            if let Ok(mut territory) = territory_query.get_mut(event.territory_entity) {
                 let window_rect = Rect::from_center_size(
-                    Vec2::new(0.0, 0.0), 
+                    Vec2::ZERO, 
                     Vec2::new(window.width(),window.height())
                 );
-                if window_rect.contains(territory.worldspace_rect.min)
-                && window_rect.contains(territory.worldspace_rect.max) {continue;}
+                if window_rect.contains(territory.worldspace_rect().min)
+                && window_rect.contains(territory.worldspace_rect().max) {continue;}
 
-                if territory.worldspace_rect.min.x < window_rect.min.x {
-                    let delta_x = window_rect.min.x - territory.worldspace_rect.min.x;
+                if territory.worldspace_rect().min.x < window_rect.min.x {
+                    let delta_x = window_rect.min.x - territory.worldspace_rect().min.x;
                     territory.move_worldspace_pos(
                         delta_x,
                         0.0
                     );
                 }
-                if territory.worldspace_rect.min.y < window_rect.min.y {
-                    let delta_y = window_rect.min.y - territory.worldspace_rect.min.y;
+                if territory.worldspace_rect().min.y < window_rect.min.y {
+                    let delta_y = window_rect.min.y - territory.worldspace_rect().min.y;
                     territory.move_worldspace_pos(
                         0.0,
                         delta_y
                     );
                 }
-                if territory.worldspace_rect.max.x > window_rect.max.x {
-                    let delta_x = window_rect.max.x - territory.worldspace_rect.max.x;
+                if territory.worldspace_rect().max.x > window_rect.max.x {
+                    let delta_x = window_rect.max.x - territory.worldspace_rect().max.x;
                     territory.move_worldspace_pos(
                         delta_x,
                         0.0
                     );
                 }
-                if territory.worldspace_rect.max.y > window_rect.max.y {
-                    let delta_y = window_rect.max.y - territory.worldspace_rect.max.y;
+                if territory.worldspace_rect().max.y > window_rect.max.y {
+                    let delta_y = window_rect.max.y - territory.worldspace_rect().max.y;
                     territory.move_worldspace_pos(
                         0.0,
                         delta_y
                     );
                 }
                 territory.world_to_screen(window.width(), window.height());
+            }
+        }
+    }
+}
+
+// A Territory is resizing! Calculate all of the window and Territory interactions with this resizing event.
+// This first part restricts the resize from invalid moves, like resizing into a locked Territory.
+pub fn determine_territory_resize_boundaries (
+    mut gizmos: Gizmos,
+    territory_settings: Res<TerritorySettings>,
+    mut territory_resizing_events: EventReader<TerritoryResizing>,
+    window_query: Query<&Window>,
+    mut territory_query: Query<(Entity, &mut Territory)>
+) {
+    for resize_event in territory_resizing_events.read() {
+        if let Ok(window) = window_query.get(resize_event.window_entity) {
+
+            // This system centers around pushing this proposed resizing rect out of invalid spaces.
+            let mut proposed_resize_rect = Rect::new(0.0, 0.0, 0.0, 0.0);
+
+            if let Ok((
+                resizing_territory_entity, 
+                resizing_territory
+                )) = territory_query.get(resize_event.territory_entity) {
+                
+                // First, create the proposed resize rect from the delta. Using worldspace for everything if possible.
+                proposed_resize_rect = Rect::from_center_size(
+                    resizing_territory.worldspace_rect().center(),
+                    Vec2::new(
+                        resizing_territory.worldspace_rect().size().x + resize_event.delta_size.x, 
+                        resizing_territory.worldspace_rect().size().y + resize_event.delta_size.y
+                    )
+                );
+
+                // Before anything else, clip any of the proposed rect that falls outside the window area.
+                let window_rect = Rect::from_center_size(
+                    Vec2::ZERO, 
+                    Vec2::new(window.width(),window.height())
+                );
+
+                // Left
+                if proposed_resize_rect.min.x < window_rect.min.x {
+                    let delta_min_x = window_rect.min.x - proposed_resize_rect.min.x;
+                    proposed_resize_rect.min.x += delta_min_x;
+                }
+                // Down
+                if proposed_resize_rect.min.y < window_rect.min.y {
+                    let delta_min_y = window_rect.min.y - proposed_resize_rect.min.y;
+                    proposed_resize_rect.min.y += delta_min_y;
+                }
+                // Right
+                if proposed_resize_rect.max.x > window_rect.max.x {
+                    let delta_max_x = window_rect.max.x - proposed_resize_rect.max.x;
+                    proposed_resize_rect.max.x += delta_max_x;
+                }
+                // Top
+                if proposed_resize_rect.max.y > window_rect.max.y {
+                    let delta_max_y = window_rect.max.y - proposed_resize_rect.max.y;
+                    proposed_resize_rect.max.y += delta_max_y;
+                }
+
+                // Begin the check iteration. Pare back the proposed rect if it makes any invalid moves.
+                // Invalid moves like resizing into a locked Territory or pushing another below the minimum size.
+                // Only the proposed rect is modified here.
+                for (other_territory_entity, other_territory) in & territory_query {
+                    if other_territory_entity == resizing_territory_entity {continue;}
+
+                    let conflict_rect = resizing_territory.worldspace_rect()
+                        .intersect(other_territory.worldspace_rect());
+                    if conflict_rect.is_empty() {continue;}
+
+                    // Find the conflict_rect's sector, which determines what direction we're resizing in.
+                    // Reduces checking & comparing down to one dimension and direction, even when resizing corners!
+                    let conflict_angle = (
+                        resizing_territory.worldspace_rect().center().y - conflict_rect.center().y)
+                        .atan2(
+                        resizing_territory.worldspace_rect().center().x - conflict_rect.center().x);
+
+                    gizmos.rect_2d(
+                        conflict_rect.center(), 
+                        0.0, 
+                        conflict_rect.size(), 
+                        Color::RED
+                    );
+
+                    // Right
+                    if conflict_angle <= FRAC_PI_4 && conflict_angle >= -FRAC_PI_4 {
+                        if other_territory.is_locked() {
+                            proposed_resize_rect.max.x -= conflict_rect.width();
+                            continue;
+                        }
+                        let distance_from_min = other_territory.worldspace_rect().width()
+                            - conflict_rect.width() 
+                            - territory_settings.min_size.x;
+                        if distance_from_min < 0.0 {
+                            println!("Right Side Minimum Violation, paring back proposed rect by {}", distance_from_min.abs());
+                            proposed_resize_rect.max.x -= distance_from_min.abs();
+                        }
+                    } 
+                    // Top
+                    else if conflict_angle >= FRAC_PI_4 && conflict_angle <= 3.0 * FRAC_PI_4 {
+                        if other_territory.is_locked() {
+                            proposed_resize_rect.max.y -= conflict_rect.height();
+                            continue;
+                        }
+                        let distance_from_min = other_territory.worldspace_rect().height()
+                            - conflict_rect.height() 
+                            - territory_settings.min_size.y;
+                        if distance_from_min < 0.0 {
+                            proposed_resize_rect.max.y -= distance_from_min.abs();
+                        }
+                    }
+                    // Left
+                    else if (conflict_angle >= 3.0 * FRAC_PI_4 && conflict_angle <= PI)
+                        || (conflict_angle >= -PI && conflict_angle <= -3.0 * FRAC_PI_4) {
+                        if other_territory.is_locked() {
+                            proposed_resize_rect.min.x += conflict_rect.width();
+                            continue;
+                        }
+                        let distance_from_min = other_territory.worldspace_rect().width()
+                            - conflict_rect.width() 
+                            - territory_settings.min_size.x;
+                        if distance_from_min < 0.0 {
+                            proposed_resize_rect.min.x += distance_from_min.abs();
+                        }
+                    }
+                    // Down
+                    else if conflict_angle >= -3.0 * FRAC_PI_4 && conflict_angle <= -FRAC_PI_4 {
+                        if other_territory.is_locked() {
+                            proposed_resize_rect.min.y += conflict_rect.height();
+                            continue;
+                        }
+                        let distance_from_min = other_territory.worldspace_rect().height()
+                            - conflict_rect.height() 
+                            - territory_settings.min_size.y;
+                        if distance_from_min < 0.0 {
+                            proposed_resize_rect.min.y += distance_from_min.abs();
+                        }
+                    }
+                }
+            }
+            if let Ok((
+                _, 
+                mut resizing_territory
+                )) = territory_query.get_mut(resize_event.territory_entity) { 
+                // Apply final proposed rect to the resizing territory before continuing to next resize system.
+                // We need to mutably iter through the Territories again, so a separate system is borrow-checker friendly.
+                
+                resizing_territory
+                .set_worldspace_rect(proposed_resize_rect)
+                .world_to_screen(window.width(), window.height());
+            }
+        }
+    }
+}
+
+// A Territory is resizing! Calculate all of the window and Territory interactions with this resizing event.
+// This second part, now having a valid resize rect, resizes away all encroaching Territories.
+pub fn apply_valid_territory_resize (
+    mut territory_resizing_events: EventReader<TerritoryResizing>,
+    window_query: Query<&Window>,
+    mut territory_query: Query<(Entity, &mut Territory)>
+) {
+    for resize_event in territory_resizing_events.read() {
+        if let Ok(window) = window_query.get(resize_event.window_entity) {
+
+            // Begin the second iteration. The proposed rect is no longer possibly demanding invalid space.
+            // So now we check again, but this time everyone else moves if there's a conflict.
+            let mut territory_combinations = territory_query
+                .iter_combinations_mut();
+            while let Some([
+                (territory_a_entity, territory_a),
+                (territory_b_entity, territory_b)
+                ]) = territory_combinations.fetch_next() {
+
+                let resizing_territory;
+                let mut adjusted_territory;
+
+                if territory_a_entity == resize_event.territory_entity {
+                    resizing_territory = territory_a;
+                    adjusted_territory = territory_b;
+                }
+                else if territory_b_entity == resize_event.territory_entity {
+                    adjusted_territory = territory_a;
+                    resizing_territory = territory_b;
+                }
+                else {continue;}
+
+                let conflict_rect = resizing_territory.worldspace_rect()
+                    .intersect(adjusted_territory.worldspace_rect());
+                if conflict_rect.is_empty() {continue;}
+
+                let conflict_angle = (
+                    resizing_territory.worldspace_rect().center().y - conflict_rect.center().y)
+                    .atan2(
+                    resizing_territory.worldspace_rect().center().x - conflict_rect.center().x);
+
+                // Right
+                if conflict_angle <= FRAC_PI_4 && conflict_angle >= -FRAC_PI_4 {
+                    adjusted_territory.worldspace_rect().min.x += conflict_rect.width();
+                } 
+                // Top
+                else if conflict_angle >= FRAC_PI_4 && conflict_angle <= 3.0 * FRAC_PI_4 {
+                    adjusted_territory.worldspace_rect().min.y += conflict_rect.height();
+                }
+                // Left
+                else if (conflict_angle >= 3.0 * FRAC_PI_4 && conflict_angle <= PI)
+                    || (conflict_angle >= -PI && conflict_angle <= -3.0 * FRAC_PI_4) {
+                    adjusted_territory.worldspace_rect().max.x -= conflict_rect.width();
+                }
+                // Down
+                else if conflict_angle >= -3.0 * FRAC_PI_4 && conflict_angle <= -FRAC_PI_4 {
+                    adjusted_territory.worldspace_rect().max.y -= conflict_rect.height();
+                }   
+                adjusted_territory.world_to_screen(window.width(), window.height());
             }
         }
     }
