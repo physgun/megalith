@@ -113,8 +113,8 @@ pub fn configure_os_window(
                 .add_child(child_camera)
                 .insert((
                     EntityName("[WINDOW] Territory Tabs Window".to_string()),
-                    TerritoryTabsUI,
-                    EguiDisplay,
+                    TerritoryTabs,
+                    DisplayLibrary::BevyEgui,
                     SpatialBundle{..Default::default()}
                 ));
             }
@@ -131,8 +131,8 @@ pub fn spawn_new_os_window(
         commands.spawn((
             EntityName("[WINDOW] Test Spawn Window".to_string()),
             Window::default(),
-            TerritoryTabsUI,
-            EguiDisplay
+            TerritoryTabs,
+            DisplayLibrary::BevyEgui
         ));
     }
 }
@@ -479,11 +479,10 @@ pub fn activate_placeholders (
                                 Territory::new(
                                     placeholder.screenspace_visual_rects[1],
                                     placeholder.worldspace_visual_rects[1],
-                                    Orientation::Vertical,
-                                    false,
-                                    false
+                                    Rect::new(0.25, 0.25, 0.75, 0.75)
                                 ),
                                 SpatialBundle::default(),
+                                DisplayLibrary::BevyEgui,
                             ))  .id();
                             commands.entity(mouse_window).add_child(new_territory_id);
                         }
@@ -536,6 +535,57 @@ pub fn find_mouse_territory_interact_pos (
     warn!("[TERRITORY DRAG START] Mouse resource had no window!");
 }
 
+// Examines a territory dragged event to determine move validity and applys the movement if it's good.
+// Does nothing if the move is invalid.
+pub fn apply_validated_territory_drag_delta (
+    mut territory_dragged_events: EventReader<TerritoryDragged>,
+    window_query: Query<&Window>,
+    mut territory_paramset: ParamSet<(
+        Query<(Entity, &Territory)>,
+        Query<&mut Territory>
+    )>
+) {
+    for drag_event in territory_dragged_events.read() {
+
+        if let Ok((dragged_territory_entity, dragged_territory)) 
+        = territory_paramset.p0().get(drag_event.territory_entity) {
+
+            let proposed_rect = Rect::from_center_size(
+                Vec2::new(
+                    dragged_territory.worldspace_rect().center().x + drag_event.mouse_delta.x,
+                    dragged_territory.worldspace_rect().center().y + drag_event.mouse_delta.y
+                ), 
+                dragged_territory.worldspace_rect().size()
+            );
+
+            // Check if the dragged Territory is outside the window. Exit early if so.
+            if let Ok(window) = window_query.get(drag_event.window_entity) {
+                if !dragged_territory.is_inside_worldspace_window(window.width(), window.height()) {
+                   return 
+                }
+            }
+            else {return}
+
+            // Check for conflicts with other Territories and exit early if one is found.
+            for (territory_entity, territory) in & territory_paramset.p0() {
+                if territory_entity != dragged_territory_entity {
+                    if !proposed_rect.intersect(territory.worldspace_rect()).is_empty() {return}                    
+                }
+            }
+        }
+        else {return}
+
+        // Passed all checks without exiting, apply the delta
+        if let Ok(mut dragged_territory) = territory_paramset.p1().get_mut(drag_event.territory_entity) {
+            if let Ok(window) = window_query.get(drag_event.window_entity) {    
+                dragged_territory
+                    .move_worldspace_pos(drag_event.mouse_delta.x, drag_event.mouse_delta.y)
+                    .world_to_screen(window.width(), window.height());
+            }
+        }
+    }
+}
+
 // Read Territory drag event and update territory position.
 pub fn determine_territory_drag_position (
     mut territory_dragged_events: EventReader<TerritoryDragged>,
@@ -559,8 +609,10 @@ pub fn determine_territory_drag_position (
     }
 }
 
+
+
 // Detect Territory collisions during Territory drag state and update position.
-// Window edge collision will be a separate system due to the query mutable borrow mess I made.
+// Window edge collision will be a separate system.
 pub fn check_territory_drag_collision (
     mut territory_dragged_events: EventReader<TerritoryDragged>,
     window_query: Query<&Window>,

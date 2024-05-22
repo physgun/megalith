@@ -7,18 +7,14 @@ pub mod resources_ui;
 pub mod events_ui;
 
 pub mod ui {
-    use bevy::app::MainScheduleOrder;
-    use bevy::ecs::schedule::ScheduleLabel;
     use bevy::prelude::*;
     use bevy::window::*;
     use leafwing_input_manager::prelude::*;
 
     use crate::input_manager::*;
     use crate::systems_common::*;
-    use crate::components_ui::*;
     use crate::systems_egui::*;
     use crate::systems_ui::*;
-    use crate::resources_ui::*;
     use crate::events_ui::*;
     
 
@@ -92,6 +88,7 @@ pub mod ui {
 
                 // System Sets: Update
                 .add_systems(Update, (
+
                     // Event Producers
                     (
                         test_spawn_window,
@@ -126,14 +123,16 @@ pub mod ui {
                                 .run_if(on_event::<CursorMoved>())
                         ).in_set(UpdateUIPlaceholderManagement),
                         (
-                            determine_territory_drag_position
+                            apply_validated_territory_drag_delta
+                                .run_if(on_event::<TerritoryDragged>())
+                            /*determine_territory_drag_position
                                 .run_if(on_event::<TerritoryDragged>())
                                 .before(check_territory_drag_collision),
                             check_territory_drag_collision
                                 .run_if(on_event::<TerritoryDragged>())
                                 .before(check_window_drag_collision),
                             check_window_drag_collision
-                                .run_if(on_event::<TerritoryDragged>())
+                                .run_if(on_event::<TerritoryDragged>())*/
                         ).in_set(UpdateUITerritoryDrag),
                         (
                             determine_territory_resize_boundaries
