@@ -11,6 +11,7 @@ pub mod ui {
     use bevy::window::*;
     use leafwing_input_manager::prelude::*;
 
+    use crate::components_ui::MoveRequest;
     use crate::input_manager::*;
     use crate::systems_common::*;
     use crate::systems_egui::*;
@@ -31,10 +32,7 @@ pub mod ui {
     pub struct UpdateUIPlaceholderManagement;
 
     #[derive(SystemSet, Debug, Hash, PartialEq, Eq, Clone)]
-    pub struct UpdateUITerritoryDrag;
-
-    #[derive(SystemSet, Debug, Hash, PartialEq, Eq, Clone)]
-    pub struct UpdateUITerritoryResize;
+    pub struct UpdateUITerritoryMove;
 
     #[derive(SystemSet, Debug, Hash, PartialEq, Eq, Clone)]
     pub struct UpdateUIStateBehavior;
@@ -58,12 +56,7 @@ pub mod ui {
                 .init_resource::<ActionState<DevControls>>()
                 .insert_resource(DevControls::default_input_map())
 
-                .add_event::<TerritoryDragStarted>()
-                .add_event::<TerritoryDragged>()
-                .add_event::<TerritoryDragEnded>()
-                .add_event::<TerritoryResizeStarted>()
-                .add_event::<TerritoryResizing>()
-                .add_event::<TerritoryResizeEnded>()
+                .add_event::<MoveRequestApplied>()
 
                 .add_event::<TestChordJustPressed>()
                 .add_event::<TestChordPressed>()
@@ -83,9 +76,6 @@ pub mod ui {
                     cleanup_all_entities_with::<CleanupOnMovingTabExit>
                 ))
 
-                .add_systems(OnEnter(TerritoryTabsState::DraggingTerritories),
-                    find_mouse_territory_interact_pos)
-
                 // System Sets: Update
                 .add_systems(Update, (
 
@@ -96,9 +86,9 @@ pub mod ui {
                         get_mouse_location
                     ).in_set(UpdateUIInput),
                     (
-                        display_territories_with_egui
-                            .before(display_placeholders_with_egui),
-                        display_placeholders_with_egui
+                        display_territory_egui
+                            .before(display_placeholders_egui),
+                        display_placeholders_egui
                     ).in_set(UpdateUIDisplay),
 
                     // Event Consumers
@@ -123,24 +113,18 @@ pub mod ui {
                                 .run_if(on_event::<CursorMoved>())
                         ).in_set(UpdateUIPlaceholderManagement),
                         (
-                            apply_validated_territory_drag_delta
-                                .run_if(on_event::<TerritoryDragged>())
-                            /*determine_territory_drag_position
-                                .run_if(on_event::<TerritoryDragged>())
-                                .before(check_territory_drag_collision),
-                            check_territory_drag_collision
-                                .run_if(on_event::<TerritoryDragged>())
-                                .before(check_window_drag_collision),
-                            check_window_drag_collision
-                                .run_if(on_event::<TerritoryDragged>())*/
-                        ).in_set(UpdateUITerritoryDrag),
-                        (
-                            determine_territory_resize_boundaries
-                                .run_if(on_event::<TerritoryResizing>())
-                                //.before(apply_valid_territory_resize),
-                            //apply_valid_territory_resize
-                            //    .run_if(on_event::<TerritoryResizing>()),
-                        ).in_set(UpdateUITerritoryResize)
+                            territory_move_eval_type
+                                .run_if(any_with_component::<MoveRequest>)
+                                .before(territory_move_process_fringe),
+                            territory_move_process_fringe
+                                .run_if(any_with_component::<MoveRequest>)
+                                .before(territory_move_check_others),
+                            territory_move_check_others
+                                .run_if(any_with_component::<MoveRequest>)
+                                .before(territory_move_apply_proposed),
+                            territory_move_apply_proposed
+                                .run_if(any_with_component::<MoveRequest>),
+                        ).in_set(UpdateUITerritoryMove),
                     ).in_set(UpdateUIStateBehavior),
                     (
                         display_debug_gizmos,
@@ -173,9 +157,7 @@ pub mod ui {
                     (
                         UpdateUIStateChanges
                     )
-                ))
-
-                ;
+                ));
         }
     }
 }

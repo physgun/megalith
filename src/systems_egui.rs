@@ -2,11 +2,8 @@ use bevy::prelude::*;
 use bevy_egui::{egui, EguiContext};
 
 use crate::components_ui::*;
-use crate::events_ui::*;
-use crate::input_manager::*;
 use crate::resources_ui::*;
 use crate::systems_common::TerritoryTabsState;
-use crate::systems_ui::*;
 
 // Insert egui related resources.
 pub fn initialize_egui_resources (mut commands: Commands) {
@@ -35,7 +32,7 @@ pub fn display_debug_info_with_egui(
 
 // How this shit work????
 // Just gizmos for now!
-pub fn display_placeholders_with_egui(
+pub fn display_placeholders_egui(
     mut gizmos: Gizmos,
     placeholder_query: Query<&Placeholder>
 ) {
@@ -99,10 +96,6 @@ pub fn display_territory_egui (
                 );
 
                 // Bunch of settings.
-                let territory_min_size = egui::Vec2::new(
-                    territory_settings.min_size.x, 
-                    territory_settings.min_size.y
-                );
                 let main_window_title = territory_entity.index().to_string();
                 let territory_style = egui::Style::default();
                 let debug_fill = egui::Color32::from_rgba_premultiplied(50, 50, 50, 25);
@@ -174,23 +167,22 @@ pub fn display_territory_egui (
                                     delta_size.y = f32::trunc(delta_size.y * 100.0) / 100.0;
 
                                     // If a drag or a change in size was detected, attach a MoveRequest.
-                                    // Will conveniently overwrite an old MoveRequest should one exist, which it shouldn't.
+                                    // Will conveniently overwrite an old MoveRequest should one exist, which it shouldn't!
                                     if bg_response.dragged() || delta_size.abs().length() > 0.0 {
-                                        let mut requested_move = MoveRequested::new(
-                                            Rect::from_corners(
-                                                Vec2::new(
-                                                    actual_egui_rect.min.x, 
-                                                    actual_egui_rect.min.y
-                                                ), 
-                                                Vec2::new(
-                                                    actual_egui_rect.max.x, 
-                                                    actual_egui_rect.max.y
-                                                ), 
-                                            ), 
-                                            Rect::from_corners(Vec2::ZERO, Vec2::ONE),
-                                        ).screen_to_world(window.width(), window.height());
-
-                                        commands.entity(territory_entity).insert(*requested_move);
+                                        commands.entity(territory_entity).insert(
+                                            MoveRequest::from_screenspace_rect(
+                                                Rect::from_corners(
+                                                    Vec2::new(
+                                                        actual_egui_rect.min.x, 
+                                                        actual_egui_rect.min.y
+                                                    ), 
+                                                    Vec2::new(
+                                                        actual_egui_rect.max.x, 
+                                                        actual_egui_rect.max.y
+                                                    )
+                                                )
+                                            ).screen_to_world(window.width(), window.height()).clone()
+                                        );
                                     }
 
                                     

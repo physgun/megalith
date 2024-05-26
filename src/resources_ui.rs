@@ -45,6 +45,11 @@ impl Default for TerritorySettings{
         }
     }
 }
+
+
+
+
+
  // Config stuff for Tabs
 #[derive(Resource)]
 pub struct TabSettings {
