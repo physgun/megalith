@@ -86,12 +86,12 @@ pub fn display_territory_egui (
                         territory.screenspace_rect().center().y
                     ), 
                     egui::Vec2::new(
-                        territory.screenspace_rect().size().x
-                        - territory_settings.inner_margins.x * 2.0
-                        - territory_settings.spacing, 
+                        territory.screenspace_rect().size().x,
+                    //    - territory_settings.inner_margins.x * 2.0
+                    //    - territory_settings.spacing, 
                         territory.screenspace_rect().size().y
-                        - territory_settings.inner_margins.y * 2.0
-                        - territory_settings.spacing
+                    //    - territory_settings.inner_margins.y * 2.0
+                    //    - territory_settings.spacing
                     )
                 );
 
@@ -153,9 +153,14 @@ pub fn display_territory_egui (
                                     let actual_egui_rect = egui::Rect::from_center_size(
                                         ui.clip_rect().center(), 
                                         egui::Vec2::new(
-                                            ui.clip_rect().size().x - 6.0, // Why -6.0? Who knows??
-                                            ui.clip_rect().size().y - 6.0  
+                                            ui.clip_rect().size().x, // Why -6.0? Who knows??
+                                            ui.clip_rect().size().y  
                                         )
+                                    );
+
+                                    let delta_min = Vec2::new(
+                                        actual_egui_rect.min.x - requested_egui_rect.min.x, 
+                                        actual_egui_rect.min.y - requested_egui_rect.min.y
                                     );
 
                                     let mut delta_size = Vec2::new(
@@ -163,13 +168,33 @@ pub fn display_territory_egui (
                                         actual_egui_rect.height() - requested_egui_rect.height()
                                     );
 
+                                    // Need to trunc or egui will spam requests with floating point errors.
                                     delta_size.x = f32::trunc(delta_size.x * 100.0) / 100.0;
                                     delta_size.y = f32::trunc(delta_size.y * 100.0) / 100.0;
 
                                     // If a drag or a change in size was detected, attach a MoveRequest.
                                     // Will conveniently overwrite an old MoveRequest should one exist, which it shouldn't!
-                                    if bg_response.dragged() || delta_size.abs().length() > 0.0 {
-                                        commands.entity(territory_entity).insert(
+                                    if bg_response.dragged() && delta_size.abs().length() == 0.0 {
+                                        debug!("MoveRequest drag delta change sent: {:?}", bg_response.drag_delta());
+                                        let move_requested = 
+                                            MoveRequest::from_screenspace_rect(
+                                                Rect::from_center_size(
+                                                    Vec2::new(
+                                                        actual_egui_rect.center().x + bg_response.drag_delta().x,
+                                                        actual_egui_rect.center().y + bg_response.drag_delta().y
+                                                    ), 
+                                                    Vec2::new(
+                                                        actual_egui_rect.size().x, 
+                                                        actual_egui_rect.size().y
+                                                    )
+                                                )
+                                            );
+                                        commands.entity(territory_entity).insert(move_requested);
+                                    }
+                                    else if !bg_response.dragged() && delta_size.abs().length() > 0.0 {
+                                        debug!("MoveRequest resize delta change sent: {:?}", delta_size);
+
+                                        let move_requested = 
                                             MoveRequest::from_screenspace_rect(
                                                 Rect::from_corners(
                                                     Vec2::new(
@@ -181,8 +206,8 @@ pub fn display_territory_egui (
                                                         actual_egui_rect.max.y
                                                     )
                                                 )
-                                            ).screen_to_world(window.width(), window.height()).clone()
-                                        );
+                                            );
+                                        commands.entity(territory_entity).insert(move_requested);
                                     }
 
                                     

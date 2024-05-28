@@ -62,6 +62,15 @@ pub mod ui {
                 .add_event::<TestChordPressed>()
                 .add_event::<TestChordJustReleased>()
                 .add_event::<SpawnWindowKeyJustPressed>()
+                .add_event::<RemoveTerritoriesKeyPressed>()
+
+                // Test system
+                .add_systems(Update, 
+                    (
+                    test_delete_all_territories_just_pressed,
+                    test_delete_all_territories.run_if(on_event::<RemoveTerritoriesKeyPressed>())
+                    )
+                )
 
                 // Startup
                 .add_systems(Startup, initialize_ui_resources)

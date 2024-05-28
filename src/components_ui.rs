@@ -31,6 +31,17 @@ impl Territory {
             Territory {screenspace_rect, worldspace_rect, relative_screenspace_rect, relative_worldspace_rect}
         }
 
+    /// Creates a [`Territory`] with all zero-sized [`Rect`]s.
+    pub fn empty() -> Self {
+        let rect_zero = Rect::from_corners(Vec2::ZERO, Vec2::ZERO);
+        Territory {
+            screenspace_rect: rect_zero, 
+            worldspace_rect: rect_zero, 
+            relative_screenspace_rect: rect_zero, 
+            relative_worldspace_rect: rect_zero
+        }
+    }
+
     /// Gets the **screenspace** `Rect` describing the `Territory`'s location in the `Window`.
     pub fn screenspace_rect(&self) -> Rect {
         self.screenspace_rect
@@ -43,14 +54,14 @@ impl Territory {
 
     /// Gets the relative **screenspace** `Rect` describing the `Territory`'s location in the `Window`.  
     /// \
-    /// This `Rect` goes from `0.0` to `1.0` relative to the total size of the `Parent` `Window`.
+    /// This `Rect` ranges from `0.0` to `1.0` relative to the total size of the `Parent` `Window`.
     pub fn relative_screenspace_rect(&self) -> Rect {
         self.relative_screenspace_rect
     }
     
     /// Gets the relative **worldspace** `Rect` describing the `Territory`'s location in the `Window`.  
     /// \
-    /// This `Rect` goes from `-0.5` to `0.5` relative to the total size of the `Parent` `Window`.
+    /// This `Rect` ranges from `-0.5` to `0.5` relative to the total size of the `Parent` `Window`.
     pub fn relative_worldspace_rect(&self) -> Rect {
         self.relative_worldspace_rect
     }
@@ -170,7 +181,10 @@ impl Territory {
                 self.screenspace_rect.min.x + delta_x, 
                 self.screenspace_rect.min.y + delta_y
             ), 
-            self.screenspace_rect.max
+            Vec2::new(
+                self.screenspace_rect.max.x + delta_x, 
+                self.screenspace_rect.max.y + delta_y
+            )
         );
         self
             .screen_to_world(window_width, window_height)
@@ -189,7 +203,7 @@ impl Territory {
     pub fn move_screenspace_corners(&mut self, delta_min: Vec2, delta_max: Vec2, window_width: f32, window_height: f32) -> &mut Self {
         self.screenspace_rect = Rect::from_corners(
             self.screenspace_rect.min + delta_min, 
-            self.screenspace_rect.min + delta_max
+            self.screenspace_rect.max + delta_max
         );
         self
             .screen_to_world(window_width, window_height)
@@ -334,8 +348,8 @@ pub struct MoveRequest {
 impl Default for MoveRequest {
     fn default() -> Self {
         MoveRequest {
-            proposed_screenspace_rect: Rect::from_corners(Vec2::ZERO, Vec2::ONE),
-            proposed_worldspace_rect: Rect::from_corners(Vec2::ZERO, Vec2::ONE),
+            proposed_screenspace_rect: Rect::from_corners(Vec2::ZERO, Vec2::ZERO),
+            proposed_worldspace_rect: Rect::from_corners(Vec2::ZERO, Vec2::ZERO),
             move_type: MoveRequestType::Unknown
         }
     }
@@ -412,15 +426,13 @@ impl MoveRequest {
     /// Changes the **screenspace** `Rect` that the UI element wants to move to. Automatic translation to other `Rect`.
     pub fn set_proposed_screenspace_rect (&mut self, new_rect: Rect, window_width: f32, window_height: f32) -> &mut Self {
         self.proposed_screenspace_rect = new_rect;
-        self.screen_to_world(window_width, window_height);
-        self
+        self.screen_to_world(window_width, window_height)
     }
 
     /// Changes the **worldspace** `Rect` that the UI element wants to move to. Automatic translation to other `Rect`.
     pub fn set_proposed_worldspace_rect (&mut self, new_rect: Rect, window_width: f32, window_height: f32) -> &mut Self {
         self.proposed_worldspace_rect = new_rect;
-        self.world_to_screen(window_width, window_height);
-        self
+        self.world_to_screen(window_width, window_height)
     }
 
     /// Changes the `move_type` to `Unknown`, meaning we don't yet have the information to know what this component wants.
@@ -444,19 +456,16 @@ impl MoveRequest {
     /// Updates the `proposed_screenspace_rect` in **screenspace** coordinates to match 
     /// the current `proposed_worldspace_rect` in **worldspace** coordinates.  
     /// \
-    /// Requires the parent `Window`'s dimensions.
+    /// Requires the `Parent` `Window`'s dimensions.
     pub fn world_to_screen(&mut self, window_width: f32, window_height: f32) -> &mut Self{
-        self.set_proposed_screenspace_rect(
-            Rect::from_center_size(
-                Vec2::new(
-                (window_width / 2.0) + self.proposed_worldspace_rect().center().x,
-                (window_height / 2.0) - self.proposed_worldspace_rect().center().y
-                ),
-                self.proposed_worldspace_rect().size(),
+        self.proposed_screenspace_rect = Rect::from_center_size(
+            Vec2::new(
+            (window_width / 2.0) + self.proposed_worldspace_rect().center().x,
+            (window_height / 2.0) - self.proposed_worldspace_rect().center().y
             ),
-            window_width,
-            window_height
-        )
+            self.proposed_worldspace_rect().size(),
+        );
+        self
     }
 
     /// Updates the `proposed_worldspace_rect` in **worldspace** coordinates to match 
@@ -464,17 +473,14 @@ impl MoveRequest {
     /// \
     /// Requires the parent `Window`'s dimensions.
     pub fn screen_to_world(&mut self, window_width: f32, window_height: f32) -> &mut Self {
-        self.set_proposed_worldspace_rect(
-            Rect::from_center_size(
-                Vec2::new(
-                self.proposed_screenspace_rect().center().x - (window_width / 2.0),
-                (window_height / 2.0) - self.proposed_screenspace_rect().center().y
-                ),
-                self.proposed_screenspace_rect().size()
+        self.proposed_worldspace_rect = Rect::from_center_size(
+            Vec2::new(
+            self.proposed_screenspace_rect().center().x - (window_width / 2.0),
+            (window_height / 2.0) - self.proposed_screenspace_rect().center().y
             ),
-            window_width,
-            window_height
-        )
+            self.proposed_screenspace_rect().size()
+        );
+        self
     }
 
     /// Moves the `proposed_screenspace_rect` some `delta_min` & `delta_max`. Automatic translation to other `Rect`.
@@ -643,3 +649,206 @@ pub enum DisplayLibrary {
 /// Mouse seeking systems will check cameras with this component.
 #[derive(Component)]
 pub struct MouseSeekingCamera;
+
+
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn territory_translates_correctly_from_screenspace() {
+        let mut test_terr = Territory::empty();
+        let input_screen = Rect::new(0.0, 0.0, 100.0, 100.0);
+        let output_world = Rect::new(-500.0, 400.0, -400.0, 500.0);
+        let output_rel_world = Rect::new(-0.5, 0.4, -0.4, 0.5);
+        let output_rel_screen = Rect::new(0.0, 0.0, 0.1, 0.1);
+        test_terr.set_screenspace_rect(
+            input_screen,
+            1000.0, 
+            1000.0
+        );
+        assert_eq!(
+            test_terr.worldspace_rect(), 
+            output_world, 
+            "Set screen failed translate to worldspace rect."
+        );
+        assert_eq!(
+            test_terr.relative_worldspace_rect(), 
+            output_rel_world, 
+            "Set screen failed translate to relative worldspace rect."
+        );
+        assert_eq!(
+            test_terr.relative_screenspace_rect(), 
+            output_rel_screen, 
+            "Set screen failed translate to relative screenspace rect."
+        );
+    }
+
+    #[test]
+    fn territory_translates_correctly_from_worldspace() {
+        let mut test_terr = Territory::empty();
+        let input_world = Rect::new(-50.0, -50.0, 50.0, 50.0);
+        let output_screen = Rect::new(450.0, 450.0, 550.0, 550.0);
+        let output_rel_screen = Rect::new(0.45, 0.45, 0.55, 0.55);
+        let output_rel_world = Rect::new(-0.05, -0.05, 0.05, 0.05);
+        test_terr.set_worldspace_rect(
+            input_world,
+            1000.0, 
+            1000.0
+        );
+        assert_eq!(
+            test_terr.screenspace_rect(), 
+            output_screen, 
+            "Set world failed translate to screenspace rect."
+        );
+        assert_eq!(
+            test_terr.relative_screenspace_rect(), 
+            output_rel_screen, 
+            "Set world failed translate to relative screenspace rect."
+        );
+        assert_eq!(
+            test_terr.relative_worldspace_rect(), 
+            output_rel_world, 
+            "Set world failed translate to relative worldspace rect."
+        );
+    }
+
+    #[test]
+    fn territory_movement_methods_move_correctly() {
+        let mut test_terr = Territory::empty();
+        test_terr.set_screenspace_rect(
+            Rect::new(0.0, 0.0, 100.0, 100.0), 
+            1000.0, 
+            1000.0
+        );
+        test_terr.move_screenspace_pos(500.0, 500.0, 1000.0, 1000.0);
+        assert_eq!(
+            test_terr.screenspace_rect(),
+            Rect::new(500.0, 500.0, 600.0, 600.0),
+            "Move screen pos failure."
+        );
+        test_terr.move_screenspace_corners(
+            Vec2::new(-100.0, -100.0), 
+            Vec2::new(-100.0, -100.0), 
+            1000.0, 
+            1000.0
+        );
+        assert_eq!(
+            test_terr.screenspace_rect(),
+            Rect::new(400.0, 400.0, 500.0, 500.0),
+            "Move screen corners failure."
+        );
+
+        test_terr.set_worldspace_rect(
+            Rect::new(-100.0, -100.0, 100.0, 100.0), 
+            1000.0, 
+            1000.0
+        );
+        test_terr.move_worldspace_pos(
+            100.0, 
+            100.0, 
+            1000.0, 
+            1000.0
+        );
+        assert_eq!(
+            test_terr.worldspace_rect(),
+            Rect::new(0.0, 0.0, 200.0, 200.0),
+            "Move world pos failure."
+        );
+        test_terr.move_worldspace_corners(
+            Vec2::new(-100.0, -100.0), 
+            Vec2::new(-100.0, -100.0), 
+            1000.0, 
+            1000.0
+        );
+        assert_eq!(
+            test_terr.worldspace_rect(),
+            Rect::new(-100.0, -100.0, 100.0, 100.0),
+            "Move world corners failure."
+        );
+    }
+
+    #[test]
+    fn moverequest_translates_correctly() {
+        let mut test_movereq = MoveRequest::from_screenspace_delta(
+            Rect::new(0.0, 0.0, 100.0, 100.0), 
+            Vec2::new(100.0, 100.0), 
+            Vec2::new(100.0, 100.0)
+        );
+        assert_eq!(
+            test_movereq.proposed_screenspace_rect(),
+            Rect::new(100.0, 100.0, 200.0, 200.0),
+            "From screenspace delta failure."
+        );
+        test_movereq.screen_to_world(1000.0, 1000.0);
+        assert_eq!(
+            test_movereq.proposed_worldspace_rect(),
+            Rect::new(-400.0, 400.0, -300.0, 300.0),
+            "From screenspace delta -> screen to world failure."
+        );
+
+        let mut test_movereq = MoveRequest::from_worldspace_delta(
+            Rect::new(-100.0, -100.0, 100.0, 100.0), 
+            Vec2::new(-100.0, -100.0), 
+            Vec2::new(-100.0, -100.0)
+        );
+        assert_eq!(
+            test_movereq.proposed_worldspace_rect(),
+            Rect::new(-200.0, -200.0, 0.0, 0.0),
+            "From worldspace delta failure."
+        );
+        test_movereq.world_to_screen(1000.0, 1000.0);
+        assert_eq!(
+            test_movereq.proposed_screenspace_rect(),
+            Rect::new(300.0, 700.0, 500.0, 500.0),
+            "From worldspace delta -> world to screen failure."
+        );
+    }
+
+    #[test]
+    fn moverequest_movement_methods_move_correctly () {
+        let mut test_movereq = MoveRequest::from_screenspace_rect(
+            Rect::new(0.0, 0.0, 100.0, 100.0)
+        );
+        test_movereq.move_screenspace_delta(
+            Vec2::new(500.0, 500.0), 
+            Vec2::new(500.0, 500.0), 
+            1000.0, 
+            1000.0
+        );
+        assert_eq!(
+            test_movereq.proposed_screenspace_rect(),
+            Rect::new(500.0, 500.0, 600.0, 600.0),
+            "Move screenspace delta failure."
+        );
+        assert_eq!(
+            test_movereq.proposed_worldspace_rect(),
+            Rect::new(0.0, 0.0, 100.0, -100.0),
+            "Move screenspace delta translation failure."
+        );
+
+        let mut test_movereq = MoveRequest::from_worldspace_rect(
+            Rect::new(400.0, -400.0, 500.0, -500.0)
+        );
+        test_movereq.move_worldspace_delta(
+            Vec2::new(-100.0, 100.0), 
+            Vec2::new(-100.0, 100.0), 
+            1000.0, 
+            1000.0
+        );
+        assert_eq!(
+            test_movereq.proposed_worldspace_rect(),
+            Rect::new(300.0, -300.0, 400.0, -400.0),
+            "Move worldspace delta failure."
+        );
+        assert_eq!(
+            test_movereq.proposed_screenspace_rect(),
+            Rect::new(800.0, 800.0, 900.0, 900.0),
+            "Move worldspace delta translation failure."
+        );
+        
+    }
+
+}

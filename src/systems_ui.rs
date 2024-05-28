@@ -176,34 +176,54 @@ pub fn territory_tabs_main_state_enter (
 /// Any [`Locked`] [`Territory`]s will have their [`MoveRequest`] component removed.
 pub fn territory_move_eval_type (
     mut commands: Commands,
+    window_query: Query<(&Window, &Children), With<TerritoryTabs>>,
     mut moving_territories_query: Query<(Entity, &Territory, Option<&Locked>, &mut MoveRequest)>
 ) {
-    for (
-        territory_entity, 
-        territory, 
-        territory_locked,
-        mut move_request
-    ) in &mut moving_territories_query {
+    for (window, window_children) in &window_query {
+        let mut moving_territories = moving_territories_query
+            .iter_many_mut(window_children);
+        while let Some(
+            (territory_entity, territory, territory_locked, mut move_request)
+        ) = moving_territories.fetch_next() {
 
-        // A Locked Territory won't process any MoveRequest.
-        if let Some(_locked) = territory_locked {
-            commands.entity(territory_entity).remove::<MoveRequest>();
-            continue;
+            // A Locked Territory won't process any MoveRequest.
+            if let Some(_locked) = territory_locked {
+                commands.entity(territory_entity).remove::<MoveRequest>();
+                continue;
+            }
+
+            if !move_request.proposed_worldspace_rect().is_empty() && move_request.proposed_screenspace_rect().is_empty() {
+                debug!("Translated MoveRequest world rect to screen!");
+                move_request.world_to_screen(window.width(), window.height());
+            }
+            
+            if !move_request.proposed_screenspace_rect().is_empty() && move_request.proposed_worldspace_rect().is_empty() {
+                debug!("Translated MoveRequest screen rect to world!");
+                move_request.screen_to_world(window.width(), window.height());
+            }
+
+            match move_request.move_type() {
+                MoveRequestType::Unknown => {
+
+                    if move_request.proposed_worldspace_rect() == territory.worldspace_rect() {
+                        commands.entity(territory_entity).remove::<MoveRequest>();
+                        //debug!("MoveRequest found with identical rect to existing rect, and was removed!");
+                        continue;
+                    }
+
+                    if territory.worldspace_rect().height() == move_request.proposed_worldspace_rect().height()
+                    && territory.worldspace_rect().width() == move_request.proposed_worldspace_rect().width() {
+                        move_request.move_type_drag();
+                        //debug!("MoveRequest type changed to Drag!");
+                    }
+                    else {
+                        move_request.move_type_drag();
+                        debug!("MoveRequest type changed to `Resize`!");
+                    }
+                },
+                MoveRequestType::Drag | MoveRequestType::Resize => {continue}
+            };
         }
-
-        match move_request.move_type() {
-            MoveRequestType::Unknown => {
-                if territory.worldspace_rect().height() == move_request.proposed_worldspace_rect().height()
-                && territory.worldspace_rect().width() == move_request.proposed_worldspace_rect().width() {
-                    move_request.move_type_drag();
-                }
-                else {
-                    move_request.move_type_resize();
-                }
-            },
-            MoveRequestType::Drag => continue,
-            MoveRequestType::Resize => continue
-        };
     }
 }
 
@@ -594,13 +614,22 @@ pub fn territory_move_apply_proposed (
         let mut move_requests = moving_territories_query.iter_many_mut(window_children);
         while let Some(
             (territory_entity, mut territory, move_request)
-        ) = move_requests.fetch_next(){
-            territory.set_worldspace_rect(
-                move_request.proposed_worldspace_rect(), 
-                window.width(), 
-                window.height()
-            );
-            commands.entity(territory_entity).remove::<MoveRequest>();
+        ) = move_requests.fetch_next() {
+            match move_request.move_type {
+                MoveRequestType::Unknown => {
+                    warn!("Unknown-type MoveRequest found on Territory during application!");
+                    commands.entity(territory_entity).remove::<MoveRequest>();
+                }
+                MoveRequestType::Drag | MoveRequestType::Resize => {
+                    //debug!("Applying {:?}", move_request.proposed_worldspace_rect());
+                    territory.set_worldspace_rect(
+                        move_request.proposed_worldspace_rect(), 
+                        window.width(), 
+                        window.height()
+                    );
+                    commands.entity(territory_entity).remove::<MoveRequest>();
+                }
+            }
         }
     }
 }
