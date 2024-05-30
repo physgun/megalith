@@ -1,8 +1,10 @@
 pub mod input_manager;
+pub mod components_common;
 pub mod components_ui;
 pub mod systems_common;
 pub mod systems_ui;
 pub mod systems_egui;
+pub mod systems_sickle;
 pub mod resources_ui;
 pub mod events_ui;
 
@@ -15,6 +17,7 @@ pub mod ui {
     use crate::input_manager::*;
     use crate::systems_common::*;
     use crate::systems_egui::*;
+    use crate::systems_sickle::*;
     use crate::systems_ui::*;
     use crate::events_ui::*;
     
@@ -57,6 +60,7 @@ pub mod ui {
                 .insert_resource(DevControls::default_input_map())
 
                 .add_event::<MoveRequestApplied>()
+                .add_event::<TerritorySpawnRequest>()
 
                 .add_event::<TestChordJustPressed>()
                 .add_event::<TestChordPressed>()
@@ -88,7 +92,6 @@ pub mod ui {
                 // System Sets: Update
                 .add_systems(Update, (
 
-                    // Event Producers
                     (
                         test_spawn_window,
                         test_chord_pressed,
@@ -97,10 +100,9 @@ pub mod ui {
                     (
                         display_territory_egui
                             .before(display_placeholders_egui),
-                        display_placeholders_egui
+                        display_placeholders_egui,
+                        spawn_territory_sickle
                     ).in_set(UpdateUIDisplay),
-
-                    // Event Consumers
                     (
                         spawn_new_os_window
                             .before(configure_os_window),

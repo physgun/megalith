@@ -2,7 +2,7 @@ use bevy::prelude::*;
 
 /// Name component for debugging.
 #[derive(Component)]
-pub struct EntityName(pub String);
+pub struct Name(pub String);
 
 /// Cleanup markers for triggering cleanup systems.
 #[derive(Component)]

@@ -91,7 +91,7 @@ pub fn configure_os_window(
 
                 let child_camera = commands
                 .spawn((
-                    EntityName("[CAMERA] UI Camera".to_string()),
+                    Name("[CAMERA] UI Camera".to_string()),
                     CleanupOnWindowClose,
                     Camera2dBundle {
                         camera: Camera {
@@ -109,10 +109,10 @@ pub fn configure_os_window(
                 commands.entity(entity)
                 .add_child(child_camera)
                 .insert((
-                    EntityName("[WINDOW] Territory Tabs Window".to_string()),
+                    Name("[WINDOW] Territory Tabs Window".to_string()),
                     TerritoryTabs,
-                    DisplayLibrary::BevyEgui,
-                    SpatialBundle{..Default::default()}
+                    DisplayLibrary::BevySickle,
+                    SpatialBundle::default()
                 ));
             }
         }
@@ -126,10 +126,10 @@ pub fn spawn_new_os_window(
 ) {
     for event in spawn_window_button_events.read() {
         commands.spawn((
-            EntityName("[WINDOW] Test Spawn Window".to_string()),
+            Name("[WINDOW] Test Spawn Window".to_string()),
             Window::default(),
             TerritoryTabs,
-            DisplayLibrary::BevyEgui
+            DisplayLibrary::BevySickle
         ));
     }
 }
@@ -193,12 +193,10 @@ pub fn territory_move_eval_type (
             }
 
             if !move_request.proposed_worldspace_rect().is_empty() && move_request.proposed_screenspace_rect().is_empty() {
-                debug!("Translated MoveRequest world rect to screen!");
                 move_request.world_to_screen(window.width(), window.height());
             }
             
             if !move_request.proposed_screenspace_rect().is_empty() && move_request.proposed_worldspace_rect().is_empty() {
-                debug!("Translated MoveRequest screen rect to world!");
                 move_request.screen_to_world(window.width(), window.height());
             }
 
@@ -207,7 +205,7 @@ pub fn territory_move_eval_type (
 
                     if move_request.proposed_worldspace_rect() == territory.worldspace_rect() {
                         commands.entity(territory_entity).remove::<MoveRequest>();
-                        //debug!("MoveRequest found with identical rect to existing rect, and was removed!");
+                        debug!("MoveRequest found with identical rect to existing rect, and was removed!");
                         continue;
                     }
 
@@ -217,8 +215,8 @@ pub fn territory_move_eval_type (
                         //debug!("MoveRequest type changed to Drag!");
                     }
                     else {
-                        move_request.move_type_drag();
-                        debug!("MoveRequest type changed to `Resize`!");
+                        move_request.move_type_resize();
+                        //debug!("MoveRequest type changed to Resize!");
                     }
                 },
                 MoveRequestType::Drag | MoveRequestType::Resize => {continue}
@@ -655,7 +653,7 @@ pub fn setup_tab_move_placeholders(
         // The special spawn button for when this happens hasn't been implemented yet.   
         if territory_query.is_empty() {
             let starter_territory = commands.spawn((
-                EntityName("[PLACEHOLDER] Starter Territory".to_string()),
+                Name("[PLACEHOLDER] Starter Territory".to_string()),
                 CleanupOnMovingTabExit,
                 Placeholder {placeholder_type: PlaceholderType::SpawnTerritory, ..Default::default()},
                 SpatialBundle::default(),
@@ -667,7 +665,7 @@ pub fn setup_tab_move_placeholders(
         }
 
         let tab_move = commands.spawn((
-            EntityName("[PLACEHOLDER] Initial TabMove".to_string()),
+            Name("[PLACEHOLDER] Initial TabMove".to_string()),
             CleanupOnMovingTabExit,
             Placeholder {placeholder_type: PlaceholderType::TabMove, ..Default::default()},
             SpatialBundle::default(),
@@ -675,7 +673,7 @@ pub fn setup_tab_move_placeholders(
         commands.entity(window_entity).add_child(tab_move);
         debug!("Spawned placeholder of type: TabMove");
         let tab_origin = commands.spawn((
-            EntityName("[PLACEHOLDER] Initial TabOrigin".to_string()),
+            Name("[PLACEHOLDER] Initial TabOrigin".to_string()),
             CleanupOnMovingTabExit,
             Placeholder {placeholder_type: PlaceholderType::TabOrigin, ..Default::default()},
             SpatialBundle::default(),
@@ -723,7 +721,7 @@ pub fn check_placeholder_types_leaving_window (
                 }
                 // Add a SpawnWindow placeholder.
                 commands.spawn((
-                    EntityName("[PLACEHOLDER] CursorLeft Event SpawnWindow".to_string()),
+                    Name("[PLACEHOLDER] CursorLeft Event SpawnWindow".to_string()),
                     CleanupOnMovingTabExit,
                     Placeholder {placeholder_type: PlaceholderType::SpawnWindow, ..Default::default()},
                     SpatialBundle::default(),
@@ -766,7 +764,7 @@ pub fn check_placeholder_types_entering_window (
 
                 // Spawn a new child placeholder. SpawnTerritory type since calculate_placeholder_data will catch it.
                 let new_placeholder = commands.spawn((
-                    EntityName("[PLACEHOLDER] CursorEntered Event SpawnTerritory".to_string()),
+                    Name("[PLACEHOLDER] CursorEntered Event SpawnTerritory".to_string()),
                     CleanupOnMovingTabExit,
                     Placeholder {placeholder_type: PlaceholderType::SpawnTerritory, ..Default::default()},
                     SpatialBundle::default()
@@ -912,6 +910,8 @@ pub fn calculate_placeholder_data(
 pub fn activate_placeholders (
     mut commands: Commands,
     mouse_location_resource: Res<WorldMousePosition>,
+    mut territory_spawn_request: EventWriter<TerritorySpawnRequest>,
+    window_query: Query<&DisplayLibrary, With<Window>>,
     placeholders_query: Query<(Entity, Option<&Parent>, &Placeholder)>
 ) {
     for (entity, placeholder_parent, placeholder) in & placeholders_query {
@@ -920,18 +920,26 @@ pub fn activate_placeholders (
                 if let Some(territory_parent) = placeholder_parent {
                     if placeholder.valid_spawn {
                         if let Some(mouse_window) = mouse_location_resource.window { 
-                            let new_territory_id = commands.spawn((
-                                EntityName("[TERRITORY] Spawned By Placeholder".to_string()),
-                                CleanupOnWindowClose,
-                                Territory {
+
+                            let mut display_library = DisplayLibrary::BevyUi;
+                            match window_query.get(mouse_window) {
+                                Ok(DisplayLibrary::BevySickle) => display_library = DisplayLibrary::BevySickle,
+                                Ok(DisplayLibrary::BevyUi) => display_library = DisplayLibrary::BevyUi,
+                                Ok(DisplayLibrary::BevyEgui) => display_library = DisplayLibrary::BevyEgui,
+                                Err(_) => {
+                                    error!("Placeholder failed to find window!");
+                                    break;
+                                }
+                            }
+                            
+                            territory_spawn_request.send(
+                                TerritorySpawnRequest {
+                                    window_entity: mouse_window,
                                     screenspace_rect: placeholder.screenspace_visual_rects[1],
                                     worldspace_rect: placeholder.worldspace_visual_rects[1],
-                                    ..Default::default()
-                                },
-                                SpatialBundle::default(),
-                                DisplayLibrary::BevyEgui,
-                            ))  .id();
-                            commands.entity(mouse_window).add_child(new_territory_id);
+                                    display_library
+                                }
+                            );
                         }
                         else {warn!("Attempted to activate SpawnTerritory, but no mouse window found!");}
                     }

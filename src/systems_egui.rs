@@ -153,8 +153,8 @@ pub fn display_territory_egui (
                                     let actual_egui_rect = egui::Rect::from_center_size(
                                         ui.clip_rect().center(), 
                                         egui::Vec2::new(
-                                            ui.clip_rect().size().x, // Why -6.0? Who knows??
-                                            ui.clip_rect().size().y  
+                                            ui.clip_rect().size().x - 6.0, // Why -6.0? Who knows??
+                                            ui.clip_rect().size().y - 6.0 
                                         )
                                     );
 

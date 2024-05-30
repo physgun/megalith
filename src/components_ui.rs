@@ -639,7 +639,6 @@ pub struct TerritoryTabs;
 /// or a `Tab` entity to override that default.
 #[derive(Component)]
 pub enum DisplayLibrary {
-    Default,
     BevyUi,
     BevyEgui,
     BevySickle
