@@ -26,6 +26,8 @@ pub fn spawn_territory_sickle (
             ).id();
             commands.entity(spawn_event.window_entity).add_child(new_territory);
 
+            
+
 
         }
     }
