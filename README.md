@@ -24,3 +24,8 @@ Designing a UI framework for CAD & Tooling applications, **Territory Tabs**. The
  - Taskpool for predicting & parallelizing large Operations.
  - All features and actions exposed out of the gate for scripting and integrations with other apps.
  - All ECS, all the time.
+
+## License
+
+This work is dual-licensed under Apache 2.0 and MIT.
+You can choose between one of them if you use this work.
