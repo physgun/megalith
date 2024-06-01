@@ -1,24 +1,24 @@
 pub mod input_manager;
+pub mod components_common;
 pub mod components_ui;
 pub mod systems_common;
 pub mod systems_ui;
 pub mod systems_egui;
+pub mod systems_sickle;
 pub mod resources_ui;
 pub mod events_ui;
 
 pub mod ui {
-    use bevy::app::MainScheduleOrder;
-    use bevy::ecs::schedule::ScheduleLabel;
     use bevy::prelude::*;
     use bevy::window::*;
     use leafwing_input_manager::prelude::*;
 
+    use crate::components_ui::MoveRequest;
     use crate::input_manager::*;
     use crate::systems_common::*;
-    use crate::components_ui::*;
     use crate::systems_egui::*;
+    use crate::systems_sickle::*;
     use crate::systems_ui::*;
-    use crate::resources_ui::*;
     use crate::events_ui::*;
     
 
@@ -35,10 +35,7 @@ pub mod ui {
     pub struct UpdateUIPlaceholderManagement;
 
     #[derive(SystemSet, Debug, Hash, PartialEq, Eq, Clone)]
-    pub struct UpdateUITerritoryDrag;
-
-    #[derive(SystemSet, Debug, Hash, PartialEq, Eq, Clone)]
-    pub struct UpdateUITerritoryResize;
+    pub struct UpdateUITerritoryMove;
 
     #[derive(SystemSet, Debug, Hash, PartialEq, Eq, Clone)]
     pub struct UpdateUIStateBehavior;
@@ -62,17 +59,22 @@ pub mod ui {
                 .init_resource::<ActionState<DevControls>>()
                 .insert_resource(DevControls::default_input_map())
 
-                .add_event::<TerritoryDragStarted>()
-                .add_event::<TerritoryDragged>()
-                .add_event::<TerritoryDragEnded>()
-                .add_event::<TerritoryResizeStarted>()
-                .add_event::<TerritoryResizing>()
-                .add_event::<TerritoryResizeEnded>()
+                .add_event::<MoveRequestApplied>()
+                .add_event::<TerritorySpawnRequest>()
 
                 .add_event::<TestChordJustPressed>()
                 .add_event::<TestChordPressed>()
                 .add_event::<TestChordJustReleased>()
                 .add_event::<SpawnWindowKeyJustPressed>()
+                .add_event::<RemoveTerritoriesKeyPressed>()
+
+                // Test system
+                .add_systems(Update, 
+                    (
+                    test_delete_all_territories_just_pressed,
+                    test_delete_all_territories.run_if(on_event::<RemoveTerritoriesKeyPressed>())
+                    )
+                )
 
                 // Startup
                 .add_systems(Startup, initialize_ui_resources)
@@ -87,24 +89,20 @@ pub mod ui {
                     cleanup_all_entities_with::<CleanupOnMovingTabExit>
                 ))
 
-                .add_systems(OnEnter(TerritoryTabsState::DraggingTerritories),
-                    find_mouse_territory_interact_pos)
-
                 // System Sets: Update
                 .add_systems(Update, (
-                    // Event Producers
+
                     (
                         test_spawn_window,
                         test_chord_pressed,
                         get_mouse_location
                     ).in_set(UpdateUIInput),
                     (
-                        display_territories_with_egui
-                            .before(display_placeholders_with_egui),
-                        display_placeholders_with_egui
+                        display_territory_egui
+                            .before(display_placeholders_egui),
+                        display_placeholders_egui,
+                        spawn_territory_sickle
                     ).in_set(UpdateUIDisplay),
-
-                    // Event Consumers
                     (
                         spawn_new_os_window
                             .before(configure_os_window),
@@ -126,22 +124,18 @@ pub mod ui {
                                 .run_if(on_event::<CursorMoved>())
                         ).in_set(UpdateUIPlaceholderManagement),
                         (
-                            determine_territory_drag_position
-                                .run_if(on_event::<TerritoryDragged>())
-                                .before(check_territory_drag_collision),
-                            check_territory_drag_collision
-                                .run_if(on_event::<TerritoryDragged>())
-                                .before(check_window_drag_collision),
-                            check_window_drag_collision
-                                .run_if(on_event::<TerritoryDragged>())
-                        ).in_set(UpdateUITerritoryDrag),
-                        (
-                            determine_territory_resize_boundaries
-                                .run_if(on_event::<TerritoryResizing>())
-                                //.before(apply_valid_territory_resize),
-                            //apply_valid_territory_resize
-                            //    .run_if(on_event::<TerritoryResizing>()),
-                        ).in_set(UpdateUITerritoryResize)
+                            territory_move_eval_type
+                                .run_if(any_with_component::<MoveRequest>)
+                                .before(territory_move_process_fringe),
+                            territory_move_process_fringe
+                                .run_if(any_with_component::<MoveRequest>)
+                                .before(territory_move_check_others),
+                            territory_move_check_others
+                                .run_if(any_with_component::<MoveRequest>)
+                                .before(territory_move_apply_proposed),
+                            territory_move_apply_proposed
+                                .run_if(any_with_component::<MoveRequest>),
+                        ).in_set(UpdateUITerritoryMove),
                     ).in_set(UpdateUIStateBehavior),
                     (
                         display_debug_gizmos,
@@ -174,9 +168,7 @@ pub mod ui {
                     (
                         UpdateUIStateChanges
                     )
-                ))
-
-                ;
+                ));
         }
     }
 }

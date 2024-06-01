@@ -1,10 +1,13 @@
 use bevy::prelude::*;
 use leafwing_input_manager::prelude::*;
 
+use crate::components_ui::*;
+
 #[derive(Actionlike, PartialEq, Eq, Clone, Copy, Hash, Debug, Reflect)]
 pub enum DevControls {
     TestChord,
-    TestSpawnNewWindow
+    TestSpawnNewWindow,
+    TestRemoveAllTerritories
 }
 impl DevControls {
     pub fn default_input_map() -> InputMap<DevControls> {
@@ -12,7 +15,9 @@ impl DevControls {
         InputMap::new([
             (Self::TestChord, UserInput::Chord(
                 vec!(InputKind::PhysicalKey(ControlLeft), InputKind::PhysicalKey(ShiftLeft) ))),
-            (Self::TestSpawnNewWindow, UserInput::Single(InputKind::PhysicalKey(KeyN)))
+            (Self::TestSpawnNewWindow, UserInput::Single(InputKind::PhysicalKey(KeyN))),
+            (Self::TestRemoveAllTerritories, UserInput::Chord(
+                vec!(InputKind::PhysicalKey(ShiftLeft), InputKind::PhysicalKey(KeyX) )))
         ])
     }
 }
@@ -29,6 +34,36 @@ pub struct TestChordJustReleased(pub Entity);
 
 #[derive(Event)]
 pub struct SpawnWindowKeyJustPressed;
+
+#[derive(Event)]
+pub struct RemoveTerritoriesKeyPressed;
+
+// Send event when key pressed.
+pub fn test_delete_all_territories_just_pressed (
+    dev_controls: Res<ActionState<DevControls>>,
+    mut remove_territories_key_pressed: EventWriter<RemoveTerritoriesKeyPressed>
+) {
+    if dev_controls.pressed(&DevControls::TestRemoveAllTerritories) {
+        remove_territories_key_pressed.send(RemoveTerritoriesKeyPressed);
+    }
+}
+
+// Remove all Territories when this key is pressed.
+pub fn test_delete_all_territories (
+    mut commands: Commands,
+    mut remove_territories_key_pressed: EventReader<RemoveTerritoriesKeyPressed>,
+    window_query: Query<&Children, With<Window>>,
+    territory_query: Query<Entity, With<Territory>>
+) {
+    for _event in remove_territories_key_pressed.read() {
+        for window_children in & window_query {
+            let mut territories = territory_query.iter_many(window_children);
+            while let Some(territory_entity) =  territories.fetch_next(){
+                commands.entity(territory_entity).despawn_recursive();
+            }
+        }
+    }
+}
 
 // Send window spawn event for testing.
 pub fn test_spawn_window (
