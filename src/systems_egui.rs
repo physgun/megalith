@@ -3,6 +3,7 @@ use bevy_egui::{egui, EguiContext};
 
 use crate::components_ui::*;
 use crate::resources_ui::*;
+use crate::components_territory::*;
 use crate::systems_common::TerritoryTabsState;
 
 // Insert egui related resources.
@@ -12,7 +13,7 @@ pub fn initialize_egui_resources (mut commands: Commands) {
 
 // egui Debug Info Window until we get Tabs up and running.
 pub fn display_debug_info_with_egui(
-    territory_tabs_current_state: Res<State<TerritoryTabsState>>,
+    territory_tabs_current_state: Res<State<TerritoryTabsMode>>,
     mut window_query: Query<(Entity, &Window, &mut EguiContext)>
 ) {
     for (window_entity, window, mut context) in &mut window_query {

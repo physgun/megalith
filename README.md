@@ -1,6 +1,6 @@
 Designing a UI framework for CAD & Tooling applications, **Territory Tabs**. The design will be based on my own experiences with all varieties of these apps, and watching others succeed and fail when using them. I'll also be developing a CAD program with this framework!
 
-##Design Goals##
+## Design Goals ##
 
 **Easy for Novices, Open to Experts**
  - Tightly constrained UI design environment for a streamlined, consistent, easy-to-learn user experience.
@@ -24,6 +24,14 @@ Designing a UI framework for CAD & Tooling applications, **Territory Tabs**. The
  - Taskpool for predicting & parallelizing large Operations.
  - All features and actions exposed out of the gate for scripting and integrations with other apps.
  - All ECS, all the time.
+
+## Roadmap ##
+**Core Territory Behavior**
+ - [] Redesign Move and Resize to be decoupled from display lbraries.
+ - [] Implement Locked Territories
+ 
+ ** Features **
+ - []
 
 ## License
 
