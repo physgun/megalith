@@ -27,9 +27,9 @@ pub fn display_debug_gizmos (
 ) {
     for territory in & territory_query {
         gizmos.rect_2d(
-            territory.worldspace_rect().center(), 
+            territory.expanse.worldspace().center(), 
             0.0,
-            territory.worldspace_rect().size(),
+            territory.expanse.worldspace().size(),
             Color::BLUE
         );
     }
@@ -67,55 +67,13 @@ pub fn get_mouse_location(
                         
                         for (entity_territory, parent, territory) in & territories_query {
                             if parent.get() == entity 
-                                && territory.worldspace_rect().contains(mouse_location_resource.worldspace_pos) {
+                                && territory.expanse.worldspace().contains(mouse_location_resource.worldspace_pos) {
                                 mouse_location_resource.territory = Some(entity_territory);
                             }
                         }
                     }
                 }
                 _ => {warn!("No RenderTarget found for camera when getting mouse info!");}
-            }
-        }
-    }
-}
-
-// A default configuration for the OS windows. Background camera, names, etc.
-// Summoned by a WindowCreated event and configures that exact window.
-pub fn configure_os_window(
-    mut commands: Commands,
-    mut window_spawn_detected_events: EventReader<WindowCreated>,
-    mut windows_query: Query<(Entity, &mut Window)>
-) {
-    for event in window_spawn_detected_events.read() {
-        for (entity, mut window) in &mut windows_query {
-            if entity == event.window{
-                window.title = "Territory Tabs".to_string();
-
-                let child_camera = commands
-                .spawn((
-                    Name::new("[CAMERA] UI Camera"),
-                    CleanupOnWindowClose,
-                    Camera2dBundle {
-                        camera: Camera {
-                            clear_color: ClearColorConfig::Custom(Color::rgb(0.29, 0.29, 0.29)), 
-                            target: RenderTarget::Window(WindowRef::Entity(entity)),
-                            ..Default::default() 
-                            }, 
-                        ..Default::default()
-                        },
-                        MouseSeekingCamera
-                    ))
-                .id();
-        
-                // Add camera as child to the window and give additional components.
-                commands.entity(entity)
-                .add_child(child_camera)
-                .insert((
-                    Name::new("[WINDOW] Territory Tabs Window"),
-                    TerritoryTabs,
-                    DisplayLibrary::BevySickle,
-                    SpatialBundle::default()
-                ));
             }
         }
     }
@@ -388,12 +346,12 @@ pub fn calculate_placeholder_data(
 
                         // Intersecting territories clip off pieces of our initial default rect too.
                         for (parent, territory) in &territory_query {
-                            let territory_conflict = proposed_worldspace_rects[1].intersect(territory.worldspace_rect());
+                            let territory_conflict = proposed_worldspace_rects[1].intersect(territory.expanse.worldspace());
                             let territory_window = parent.get();
                             if territory_window == event.window && !territory_conflict.is_empty() {
                             
-                                let conflict_angle = (worldspace_upper_left.y - territory.worldspace_rect().center().y)
-                                    .atan2(worldspace_upper_left.x - territory.worldspace_rect().center().x);
+                                let conflict_angle = (worldspace_upper_left.y - territory.expanse.worldspace().center().y)
+                                    .atan2(worldspace_upper_left.x - territory.expanse.worldspace().center().x);
 
                                 if conflict_angle <= FRAC_PI_4 && conflict_angle >= -FRAC_PI_4 {
                                     proposed_worldspace_rects[1].min.x += territory_conflict.width();
@@ -434,11 +392,13 @@ pub fn calculate_placeholder_data(
 
 
 /// Iterate through all placeholders, and do what actions they represent.
+/// TODO: Refactor the hell out of this mess.
 pub fn activate_placeholders (
     mut commands: Commands,
     mouse_location_resource: Res<WorldMousePosition>,
     mut territory_spawn_request: EventWriter<TerritorySpawnRequest>,
-    window_query: Query<&DisplayLibrary, With<Window>>,
+    window_display_query: Query<&DisplayLibrary, With<Window>>,
+    window_query: Query<&Window>,
     placeholders_query: Query<(Entity, Option<&Parent>, &Placeholder)>
 ) {
     for (entity, placeholder_parent, placeholder) in & placeholders_query {
@@ -449,7 +409,7 @@ pub fn activate_placeholders (
                         if let Some(mouse_window) = mouse_location_resource.window { 
 
                             let mut display_library = DisplayLibrary::BevyUi;
-                            match window_query.get(mouse_window) {
+                            match window_display_query.get(mouse_window) {
                                 Ok(DisplayLibrary::BevySickle) => display_library = DisplayLibrary::BevySickle,
                                 Ok(DisplayLibrary::BevyUi) => display_library = DisplayLibrary::BevyUi,
                                 Ok(DisplayLibrary::BevyEgui) => display_library = DisplayLibrary::BevyEgui,
@@ -458,12 +418,24 @@ pub fn activate_placeholders (
                                     break;
                                 }
                             }
+
+                            let mut new_rectkit = RectKit::empty();
+                            if let Ok(window) = window_query.get(mouse_window) {
+                                new_rectkit.set_screenspace(
+                                    placeholder.screenspace_visual_rects[1], 
+                                    window.width(), 
+                                    window.height()
+                                );
+                            }
+                            else {
+                                warn!("Territory Spawn request failed - unable to find window!");
+                                break;
+                            }
                             
                             territory_spawn_request.send(
                                 TerritorySpawnRequest {
                                     window_entity: mouse_window,
-                                    screenspace_rect: placeholder.screenspace_visual_rects[1],
-                                    worldspace_rect: placeholder.worldspace_visual_rects[1],
+                                    expanse: new_rectkit,
                                     display_library
                                 }
                             );

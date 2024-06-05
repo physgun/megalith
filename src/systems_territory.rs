@@ -99,10 +99,7 @@ pub struct MoveRequestApplied;
 #[derive(Event)]
 pub struct TerritorySpawnRequest {
     pub window_entity: Entity,
-    pub screenspace_rect: Rect,
-    pub worldspace_rect: Rect,
-    //pub relative_screenspace_rect: Rect,
-    //pub relative_worldspace_rect: Rect,
+    pub expanse: RectKit,
     pub display_library: DisplayLibrary
 }
 
@@ -113,9 +110,9 @@ pub fn display_debug_gizmos (
 ) {
     for territory in & territory_query {
         gizmos.rect_2d(
-            territory.worldspace_rect().center(), 
+            territory.expanse.worldspace().center(), 
             0.0,
-            territory.worldspace_rect().size(),
+            territory.expanse.worldspace().size(),
             Color::BLUE
         );
     }
@@ -149,6 +146,21 @@ pub fn configure_os_window(
                 TerritoryTabsCamera,
                 MouseSeekingCamera // TODO: Refactor this out.
             )).id();
+
+            commands.spawn((
+                Name::new("[ROOT NODE] Territory Tabs Window Root Node"),
+                NodeBundle {
+                    style: Style {
+                        width: Val::Percent(100.0),
+                        height: Val::Percent(100.0),
+                        ..default()
+                    },
+                    background_color: BackgroundColor(Color::DARK_GRAY),
+                    ..default()
+                },
+                TargetCamera(child_camera),
+                TerritoryTabsUIRoot
+            ));
     
             // Add camera as child to the window and give additional components.
             commands.entity(event.window)
@@ -247,25 +259,25 @@ pub fn territory_move_eval_type (
                 continue;
             }
 
-            if !move_request.proposed_worldspace_rect().is_empty() && move_request.proposed_screenspace_rect().is_empty() {
-                move_request.world_to_screen(window.width(), window.height());
+            if !move_request.proposed_expanse.worldspace().is_empty() && move_request.proposed_expanse.screenspace().is_empty() {
+                move_request.proposed_expanse.world_to_screen(window.width(), window.height());
             }
             
-            if !move_request.proposed_screenspace_rect().is_empty() && move_request.proposed_worldspace_rect().is_empty() {
-                move_request.screen_to_world(window.width(), window.height());
+            if !move_request.proposed_expanse.screenspace().is_empty() && move_request.proposed_expanse.worldspace().is_empty() {
+                move_request.proposed_expanse.screen_to_world(window.width(), window.height());
             }
 
             match move_request.move_type() {
                 MoveRequestType::Unknown => {
 
-                    if move_request.proposed_worldspace_rect() == territory.worldspace_rect() {
+                    if move_request.proposed_expanse.worldspace() == territory.expanse.worldspace() {
                         commands.entity(territory_entity).remove::<MoveRequest>();
                         debug!("MoveRequest found with identical rect to existing rect, and was removed!");
                         continue;
                     }
 
-                    if territory.worldspace_rect().height() == move_request.proposed_worldspace_rect().height()
-                    && territory.worldspace_rect().width() == move_request.proposed_worldspace_rect().width() {
+                    if territory.expanse.worldspace().height() == move_request.proposed_expanse.worldspace().height()
+                    && territory.expanse.worldspace().width() == move_request.proposed_expanse.worldspace().width() {
                         move_request.move_type_drag();
                         //debug!("MoveRequest type changed to Drag!");
                     }
@@ -302,50 +314,50 @@ pub fn territory_move_process_fringe (
                     commands.entity(territory_entity).remove::<MoveRequest>(); // Get outta here!
                 },
                 MoveRequestType::Drag => {
-                    if window_rect.contains(move_request.proposed_worldspace_rect().min)
-                    && window_rect.contains(move_request.proposed_worldspace_rect().max) {continue;}
+                    if window_rect.contains(move_request.proposed_expanse.worldspace().min)
+                    && window_rect.contains(move_request.proposed_expanse.worldspace().max) {continue;}
     
-                    if move_request.proposed_worldspace_rect().min.x < window_rect.min.x {
-                        let delta_x = window_rect.min.x - move_request.proposed_worldspace_rect().min.x;
-                        move_request.move_worldspace_delta(
-                            Vec2::new(delta_x, 0.0),
-                            Vec2::new(delta_x, 0.0),
+                    if move_request.proposed_expanse.worldspace().min.x < window_rect.min.x {
+                        let delta_x = window_rect.min.x - move_request.proposed_expanse.worldspace().min.x;
+                        move_request.proposed_expanse.move_worldspace_pos(
+                            delta_x,
+                            0.0,
                             window.width(),
                             window.height()
                         );
                     }
-                    if move_request.proposed_worldspace_rect().min.y < window_rect.min.y {
-                        let delta_y = window_rect.min.y - move_request.proposed_worldspace_rect().min.y;
-                        move_request.move_worldspace_delta(
-                            Vec2::new(0.0, delta_y),
-                            Vec2::new(0.0, delta_y),
+                    if move_request.proposed_expanse.worldspace().min.y < window_rect.min.y {
+                        let delta_y = window_rect.min.y - move_request.proposed_expanse.worldspace().min.y;
+                        move_request.proposed_expanse.move_worldspace_pos(
+                            0.0,
+                            delta_y,
                             window.width(),
                             window.height()
                         );
                     }
-                    if move_request.proposed_worldspace_rect().max.x > window_rect.max.x {
-                        let delta_x = window_rect.max.x - move_request.proposed_worldspace_rect().max.x;
-                        move_request.move_worldspace_delta(
-                            Vec2::new(delta_x, 0.0),
-                            Vec2::new(delta_x, 0.0),
+                    if move_request.proposed_expanse.worldspace().max.x > window_rect.max.x {
+                        let delta_x = window_rect.max.x - move_request.proposed_expanse.worldspace().max.x;
+                        move_request.proposed_expanse.move_worldspace_pos(
+                            delta_x,
+                            0.0,
                             window.width(),
                             window.height()
                         );
                     }
-                    if move_request.proposed_worldspace_rect().max.y > window_rect.max.y {
-                        let delta_y = window_rect.max.y - move_request.proposed_worldspace_rect().max.y;
-                        move_request.move_worldspace_delta(
-                            Vec2::new(0.0, delta_y),
-                            Vec2::new(0.0, delta_y),
+                    if move_request.proposed_expanse.worldspace().max.y > window_rect.max.y {
+                        let delta_y = window_rect.max.y - move_request.proposed_expanse.worldspace().max.y;
+                        move_request.proposed_expanse.move_worldspace_pos(
+                            0.0,
+                            delta_y,
                             window.width(),
                             window.height()
                         );
                     }
                 },
                 MoveRequestType::Resize => {
-                    let inbounds_rect = window_rect.intersect(move_request.proposed_worldspace_rect());
+                    let inbounds_rect = window_rect.intersect(move_request.proposed_expanse.worldspace());
 
-                    move_request.set_proposed_worldspace_rect(
+                    move_request.proposed_expanse.set_worldspace(
                         inbounds_rect, 
                         window.width(), 
                         window.height()
@@ -392,8 +404,8 @@ pub fn territory_move_check_others (
                         (other_territory, _is_locked)
                     ) = other_territories.fetch_next() {
 
-                        let conflict_rect = move_request.proposed_worldspace_rect()
-                            .intersect(other_territory.worldspace_rect());
+                        let conflict_rect = move_request.proposed_expanse.worldspace()
+                            .intersect(other_territory.expanse.worldspace());
                         if conflict_rect.is_empty() {continue;}
 
                         // If the user goes nuts, they can drag Territories fast enough that the conflict rect
@@ -401,21 +413,21 @@ pub fn territory_move_check_others (
                         // TODO: Handle that case better than mostly.
                         if conflict_rect.height() >= conflict_rect.width() {
 
-                            if move_request.proposed_worldspace_rect().center().x 
-                            >= other_territory.worldspace_rect().center().x {
-                                let remaining_space = other_territory.worldspace_rect().max.x - conflict_rect.max.x;
-                                move_request.move_worldspace_delta(
-                                    Vec2::new(conflict_rect.width() + remaining_space, 0.0),
-                                    Vec2::new(conflict_rect.width() + remaining_space, 0.0),
+                            if move_request.proposed_expanse.worldspace().center().x 
+                            >= other_territory.expanse.worldspace().center().x {
+                                let remaining_space = other_territory.expanse.worldspace().max.x - conflict_rect.max.x;
+                                move_request.proposed_expanse.move_worldspace_pos(
+                                    conflict_rect.width() + remaining_space,
+                                    0.0,
                                     window.width(),
                                     window.height()
                                 );
                             }
                             else {
-                                let remaining_space = conflict_rect.min.x - other_territory.worldspace_rect().min.x;
-                                move_request.move_worldspace_delta(
-                                    Vec2::new(-1.0 * conflict_rect.width() - remaining_space, 0.0),
-                                    Vec2::new(-1.0 * conflict_rect.width() - remaining_space, 0.0),
+                                let remaining_space = conflict_rect.min.x - other_territory.expanse.worldspace().min.x;
+                                move_request.proposed_expanse.move_worldspace_pos(
+                                    -1.0 * conflict_rect.width() - remaining_space,
+                                    0.0,
                                     window.width(),
                                     window.height()
                                 );
@@ -423,21 +435,21 @@ pub fn territory_move_check_others (
                         }
                         else {
 
-                            if move_request.proposed_worldspace_rect().center().y 
-                            >= other_territory.worldspace_rect().center().y {
-                                let remaining_space = other_territory.worldspace_rect().max.y - conflict_rect.max.y;
-                                move_request.move_worldspace_delta(
-                                    Vec2::new(0.0, conflict_rect.height() + remaining_space),
-                                    Vec2::new(0.0, conflict_rect.height() + remaining_space),
+                            if move_request.proposed_expanse.worldspace().center().y 
+                            >= other_territory.expanse.worldspace().center().y {
+                                let remaining_space = other_territory.expanse.worldspace().max.y - conflict_rect.max.y;
+                                move_request.proposed_expanse.move_worldspace_pos(
+                                    0.0,
+                                    conflict_rect.height() + remaining_space,
                                     window.width(),
                                     window.height()
                                 );
                             }
                             else {
-                                let remaining_space = conflict_rect.min.y - other_territory.worldspace_rect().min.y;
-                                move_request.move_worldspace_delta(
-                                    Vec2::new(0.0, -1.0 * conflict_rect.height() - remaining_space),
-                                    Vec2::new(0.0, -1.0 * conflict_rect.height() - remaining_space),
+                                let remaining_space = conflict_rect.min.y - other_territory.expanse.worldspace().min.y;
+                                move_request.proposed_expanse.move_worldspace_pos(
+                                    0.0,
+                                    -1.0 * conflict_rect.height() - remaining_space,
                                     window.width(),
                                     window.height()
                                 );
@@ -452,8 +464,8 @@ pub fn territory_move_check_others (
                         (other_territory, _is_locked)
                     ) = other_territories.fetch_next() {
 
-                        let conflict_rect = move_request.proposed_worldspace_rect()
-                            .intersect(other_territory.worldspace_rect());
+                        let conflict_rect = move_request.proposed_expanse.worldspace()
+                            .intersect(other_territory.expanse.worldspace());
                         if !conflict_rect.is_empty() {
                             warn!("Drag-type MoveRequest still found conflicts after processing. MoveRequest removed!");
                             commands.entity(territory_entity).remove::<MoveRequest>();
@@ -468,15 +480,15 @@ pub fn territory_move_check_others (
                         (other_territory, is_locked)
                     ) = other_territories.fetch_next() {
                             
-                        let conflict_rect = move_request.proposed_worldspace_rect()
-                            .intersect(other_territory.worldspace_rect());
+                        let conflict_rect = move_request.proposed_expanse.worldspace()
+                            .intersect(other_territory.expanse.worldspace());
                         if conflict_rect.is_empty() {continue;}
 
                         // Find the conflict_rect's sector, which determines what direction we pared back proposed resize.
                         let conflict_angle = (
-                            move_request.proposed_worldspace_rect().center().y - conflict_rect.center().y)
+                            move_request.proposed_expanse.worldspace().center().y - conflict_rect.center().y)
                             .atan2(
-                            move_request.proposed_worldspace_rect().center().x - conflict_rect.center().x);
+                            move_request.proposed_expanse.worldspace().center().x - conflict_rect.center().x);
 
                         // Cycle through and see, first, how far we can move our resize, paring back as necessary.
                         // Don't move away other Territories yet. Some might be locked!
@@ -484,7 +496,7 @@ pub fn territory_move_check_others (
                         // Right
                         if conflict_angle <= FRAC_PI_4 && conflict_angle >= -FRAC_PI_4 {
                             if let Some(_locked) = is_locked {
-                                move_request.move_worldspace_delta(
+                                move_request.proposed_expanse.move_worldspace_corners(
                                     Vec2::ZERO, 
                                     Vec2::new(-1.0 * conflict_rect.width(), 0.0), 
                                     window.width(), 
@@ -494,10 +506,10 @@ pub fn territory_move_check_others (
                             }
 
                             let conflict_overreach = conflict_rect.width()
-                                - (other_territory.worldspace_rect().width() - territory_settings.min_size.x);
+                                - (other_territory.expanse.worldspace().width() - territory_settings.min_size.x);
 
                             if conflict_overreach > 0.0 {
-                                move_request.move_worldspace_delta(
+                                move_request.proposed_expanse.move_worldspace_corners(
                                     Vec2::ZERO, 
                                     Vec2::new(-1.0 * conflict_overreach, 0.0), 
                                     window.width(), 
@@ -508,7 +520,7 @@ pub fn territory_move_check_others (
                         // Top
                         else if conflict_angle >= FRAC_PI_4 && conflict_angle <= 3.0 * FRAC_PI_4 {
                             if let Some(_locked) = is_locked {
-                                move_request.move_worldspace_delta(
+                                move_request.proposed_expanse.move_worldspace_corners(
                                     Vec2::ZERO, 
                                     Vec2::new(0.0, -1.0 * conflict_rect.height()), 
                                     window.width(), 
@@ -518,10 +530,10 @@ pub fn territory_move_check_others (
                             }
 
                             let conflict_overreach = conflict_rect.height()
-                                - (other_territory.worldspace_rect().height() - territory_settings.min_size.y);
+                                - (other_territory.expanse.worldspace().height() - territory_settings.min_size.y);
 
                             if conflict_overreach > 0.0 {
-                                move_request.move_worldspace_delta(
+                                move_request.proposed_expanse.move_worldspace_corners(
                                     Vec2::ZERO, 
                                     Vec2::new(0.0, -1.0 * conflict_overreach), 
                                     window.width(), 
@@ -533,7 +545,7 @@ pub fn territory_move_check_others (
                         else if (conflict_angle >= 3.0 * FRAC_PI_4 && conflict_angle <= PI)
                             || (conflict_angle >= -PI && conflict_angle <= -3.0 * FRAC_PI_4) {
                             if let Some(_locked) = is_locked {
-                                move_request.move_worldspace_delta(
+                                move_request.proposed_expanse.move_worldspace_corners(
                                     Vec2::new(1.0 * conflict_rect.width(), 0.0), 
                                     Vec2::ZERO, 
                                     window.width(), 
@@ -543,10 +555,10 @@ pub fn territory_move_check_others (
                             }
 
                             let conflict_overreach = conflict_rect.width()
-                                - (other_territory.worldspace_rect().width() - territory_settings.min_size.x);
+                                - (other_territory.expanse.worldspace().width() - territory_settings.min_size.x);
 
                             if conflict_overreach > 0.0 {
-                                move_request.move_worldspace_delta(
+                                move_request.proposed_expanse.move_worldspace_corners(
                                     Vec2::new(1.0 * conflict_overreach, 0.0),
                                     Vec2::ZERO, 
                                     window.width(), 
@@ -557,7 +569,7 @@ pub fn territory_move_check_others (
                         // Down
                         else if conflict_angle >= -3.0 * FRAC_PI_4 && conflict_angle <= -FRAC_PI_4 {
                             if let Some(_locked) = is_locked {
-                                move_request.move_worldspace_delta(
+                                move_request.proposed_expanse.move_worldspace_corners(
                                     Vec2::new(0.0, 1.0 * conflict_rect.height()), 
                                     Vec2::ZERO, 
                                     window.width(), 
@@ -567,10 +579,10 @@ pub fn territory_move_check_others (
                             }
 
                             let conflict_overreach = conflict_rect.height()
-                                - (other_territory.worldspace_rect().height() - territory_settings.min_size.y);
+                                - (other_territory.expanse.worldspace().height() - territory_settings.min_size.y);
 
                             if conflict_overreach > 0.0 {
-                                move_request.move_worldspace_delta(
+                                move_request.proposed_expanse.move_worldspace_corners(
                                     Vec2::new(0.0, 1.0 * conflict_overreach), 
                                     Vec2::ZERO, 
                                     window.width(), 
@@ -587,15 +599,15 @@ pub fn territory_move_check_others (
                         (mut other_territory, _is_locked)
                     ) = other_territories.fetch_next() {
 
-                        let conflict_rect = move_request.proposed_worldspace_rect()
-                            .intersect(other_territory.worldspace_rect());
+                        let conflict_rect = move_request.proposed_expanse.worldspace()
+                            .intersect(other_territory.expanse.worldspace());
                         if conflict_rect.is_empty() {continue;}
 
                         // Find the conflict_rect's sector, which determines what direction we resize the other Territory.
                         let conflict_angle = (
-                            move_request.proposed_worldspace_rect().center().y - conflict_rect.center().y)
+                            move_request.proposed_expanse.worldspace().center().y - conflict_rect.center().y)
                             .atan2(
-                            move_request.proposed_worldspace_rect().center().x - conflict_rect.center().x);
+                            move_request.proposed_expanse.worldspace().center().x - conflict_rect.center().x);
 
                         // Second run-through to push other Territories out of our, now valid, resize MoveRequest.
                         // Don't forget to invert the direction of resize, 
@@ -603,7 +615,7 @@ pub fn territory_move_check_others (
 
                         // Right
                         if conflict_angle <= FRAC_PI_4 && conflict_angle >= -FRAC_PI_4 {
-                            other_territory.move_worldspace_corners(
+                            other_territory.expanse.move_worldspace_corners(
                                 Vec2::new(1.0 * conflict_rect.width(), 0.0),
                                 Vec2::ZERO,
                                 window.width(),
@@ -612,7 +624,7 @@ pub fn territory_move_check_others (
                         } 
                         // Top
                         else if conflict_angle >= FRAC_PI_4 && conflict_angle <= 3.0 * FRAC_PI_4 {
-                            other_territory.move_worldspace_corners(
+                            other_territory.expanse.move_worldspace_corners(
                                 Vec2::new(0.0, 1.0 * conflict_rect.height()),
                                 Vec2::ZERO,
                                 window.width(),
@@ -622,7 +634,7 @@ pub fn territory_move_check_others (
                         // Left (atan2 is discontinuous at PI, as its range is -PI to PI)
                         else if (conflict_angle >= 3.0 * FRAC_PI_4 && conflict_angle <= PI)
                             || (conflict_angle >= -PI && conflict_angle <= -3.0 * FRAC_PI_4) {
-                            other_territory.move_worldspace_corners(
+                            other_territory.expanse.move_worldspace_corners(
                                 Vec2::ZERO,
                                 Vec2::new(-1.0 * conflict_rect.height(), 0.0),
                                 window.width(),
@@ -631,7 +643,7 @@ pub fn territory_move_check_others (
                         }
                         // Down
                         else if conflict_angle >= -3.0 * FRAC_PI_4 && conflict_angle <= -FRAC_PI_4 {
-                            other_territory.move_worldspace_corners(
+                            other_territory.expanse.move_worldspace_corners(
                                 Vec2::ZERO,
                                 Vec2::new(0.0, -1.0 * conflict_rect.height()),
                                 window.width(),
@@ -665,8 +677,8 @@ pub fn territory_move_apply_proposed (
                 },
 
                 MoveRequestType::Drag | MoveRequestType::Resize => {
-                    territory.set_worldspace_rect(
-                        move_request.proposed_worldspace_rect(), 
+                    territory.expanse.set_worldspace(
+                        move_request.proposed_expanse.worldspace(), 
                         window.width(), 
                         window.height()
                     );

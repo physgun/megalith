@@ -49,46 +49,6 @@ pub fn configure_os_window_sickle (
         if let Ok(display_library) = window_query.get(event.window){
             if matches!(display_library, DisplayLibrary::BevySickle) {
                 
-                let mut ui_camera_entity = Entity::PLACEHOLDER;
-                for (camera_entity, camera_parent) in & ui_camera_query {
-                    if camera_parent.get() == event.window {
-                        ui_camera_entity = camera_entity;
-                        debug!("UI Cam found!");
-                    }
-                }
-
-                let mut root_entity = Entity::PLACEHOLDER;
-                commands.ui_builder(UiRoot).container((
-                    Name::new("[ROOT NODE] Sickle Root Node"),
-                    NodeBundle {
-                        style: Style {
-                            width: Val::Percent(100.0),
-                            height: Val::Percent(100.0),
-                            ..default()
-                        },
-                        ..default()
-                    },
-                    TargetCamera(ui_camera_entity),
-                ), |container| {
-                    root_entity = container
-                        .spawn((
-                            Name::new("[ROOT NODE] Territory Tabs Root Node"),
-                            NodeBundle {
-                                style: Style {
-                                    width: Val::Percent(100.0),
-                                    height: Val::Percent(100.0),
-                                    ..default()
-                                },
-                                background_color: BackgroundColor(Color::DARK_GRAY),
-                                ..default()
-                            },
-                            TerritoryTabsUIRoot
-                        ))
-                        .id();
-                });
-
-                commands.entity(event.window).add_child(root_entity);
-                debug!("Root entity added as child to Window!");
             }
         }
     }
@@ -97,16 +57,15 @@ pub fn configure_os_window_sickle (
 pub fn spawn_territory_sickle (
     mut commands: Commands,
     mut territory_spawn_request_event: EventReader<TerritorySpawnRequest>,
-    window_ui_root_query: Query<(Entity, &Parent), With<TerritoryTabsUIRoot>>
+    window_ui_root_query: Query<Entity, With<TerritoryTabsUIRoot>>
 ) {
     for spawn_event in territory_spawn_request_event.read() {
         if matches!(spawn_event.display_library, DisplayLibrary::BevySickle) {
             let new_territory = commands.spawn(
                 (
-                    Name::new("[TERRITORY] Spawned With Sickle"),
+                    Name::new("[TERRITORY] Sickle"),
                     Territory {
-                        screenspace_rect: spawn_event.screenspace_rect,
-                        worldspace_rect: spawn_event.worldspace_rect,
+                        expanse: spawn_event.expanse,
                         ..Default::default()
                     },
                     SpatialBundle::default(),
@@ -114,14 +73,34 @@ pub fn spawn_territory_sickle (
                 )
             ).id();
 
-            let mut root_entity = Entity::PLACEHOLDER;
-            if let Ok((entity, root_parent)) = window_ui_root_query.get(spawn_event.window_entity) {
-                if root_parent.get() == spawn_event.window_entity {
-                    root_entity = entity;
+            // Territory must hold the Node entities! Move things around!
+            let territory_node = commands.spawn((
+                Name::new("[NODE] Territory BG"),
+                NodeBundle {
+                    style: Style {
+                        position_type: PositionType::Absolute,
+                        left: Val::Percent(spawn_event.expanse.relative_worldspace().min.x * 100.0),
+                        top: Val::Percent(spawn_event.expanse.relative_worldspace().max.y * 100.0),
+                        right: Val::Percent(spawn_event.expanse.relative_worldspace().max.x * 100.0),
+                        bottom: Val::Percent(spawn_event.expanse.relative_worldspace().min.y * 100.0),
+                        ..default()
+                    },
+                    background_color: BackgroundColor(Color::GRAY),
+                    ..default()
                 }
+            )).id();
+
+            let mut ui_root = Entity::PLACEHOLDER;
+            if let Ok(root) = window_ui_root_query.get(spawn_event.window_entity) {
+                ui_root = root;
+            }
+            else {
+                warn!("Broke. :)");
+                break;
             }
 
             commands.entity(spawn_event.window_entity).add_child(new_territory);
+            commands.entity(ui_root).add_child(territory_node);
 
         }
     }
