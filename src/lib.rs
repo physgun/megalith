@@ -8,6 +8,7 @@ pub mod resources_ui;
 
 pub mod components_territory;
 pub mod systems_territory;
+pub mod display_territory;
 pub mod display_territory_sickle;
 
 pub mod ui {

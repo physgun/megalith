@@ -8,6 +8,7 @@ use bevy::window::*;
 use bevy::render::camera::*;
 
 use crate::components_territory::*;
+use crate::display_territory::*;
 use crate::display_territory_sickle::*;
 use crate::input_manager::*;
 
@@ -31,6 +32,7 @@ impl Plugin for TerritoryPlugin {
                     .chain()
                     .in_set(WindowConfig),
                 (
+                    spawn_territory,
                     spawn_territory_sickle,
                     display_debug_gizmos
                 )
@@ -159,7 +161,9 @@ pub fn configure_os_window(
                     ..default()
                 },
                 TargetCamera(child_camera),
-                TerritoryTabsUIRoot
+                TerritoryTabsUIRoot {
+                    associated_window_entity: event.window
+                }
             ));
     
             // Add camera as child to the window and give additional components.

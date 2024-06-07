@@ -38,8 +38,14 @@ pub struct TerritoryTabs;
 pub struct TerritoryTabsCamera;
 
 #[derive(Component)]
-/// Identifies the `Window` child entity for the UI Root Node.
-pub struct TerritoryTabsUIRoot; 
+/// Identifies the UI Root Node associated with a [`Window`] [`Entity`].
+pub struct TerritoryTabsUIRoot {
+    /// The [`Window`] [`Entity`] this root node marker component is associated with.  
+    /// \
+    /// bevy_ui queries for root nodes by looking for nodes without a [`Parent`], so the root node can't be connected
+    /// to the [`Window`] that way. Another use case for entity relations, when they get here!
+    pub associated_window_entity: Entity
+}
 
 /// App State communicating the operating Mode of the `Territory Tabs` UI.
 #[derive(States, Default, Debug, Clone, PartialEq, Eq, Hash)]
@@ -57,7 +63,7 @@ pub enum TerritoryTabsMode {
 
 /// Defines what library will be used to display UI. Add to a `Window` entity to set a default. Add to a `Territory`
 /// or a `Tab` entity to override that default.
-#[derive(Component)]
+#[derive(Component, Clone, Copy)]
 pub enum DisplayLibrary {
     BevyUi,
     BevyEgui,
@@ -442,13 +448,11 @@ pub struct Territory {
     /// What z-level the [`Territory`]'s base node will occupy.
     pub z_index: Option<usize>,
     /// [`Entity`] ID of the base container node, covering the entire size of the [`Territory`].
-    pub base_node: Entity,
-    /// [`Entity`] ID of the frame node. Governs the style of the purely visual border of the [`Territory`].
-    pub frame_node: Entity,
+    pub base_node: Option<Entity>,
     /// [`Entity`] ID of the node area where the [`Territory`] will sense drag interactions.
-    pub drag_node: Entity,
-    /// [`Entity`] tuple of the border resize button nodes.
-    pub resize_nodes: (Entity, Entity)
+    pub drag_node: Option<Entity>,
+    /// [`Entity`] ID of the border resize node.
+    pub resize_node: Option<Entity>
 
 }
 impl Default for Territory {
@@ -456,10 +460,9 @@ impl Default for Territory {
         Territory {
             expanse: RectKit::default(),
             z_index: Default::default(),
-            base_node: Entity::PLACEHOLDER,
-            frame_node: Entity::PLACEHOLDER,
-            drag_node: Entity::PLACEHOLDER,
-            resize_nodes: (Entity::PLACEHOLDER, Entity::PLACEHOLDER)
+            base_node: None,
+            drag_node: None,
+            resize_node: None
         }
     }
 }
@@ -467,12 +470,11 @@ impl Territory {
     pub fn new(
         expanse: RectKit,
         z_index: Option<usize>,
-        base_node: Entity,
-        frame_node: Entity,
-        drag_node: Entity,
-        resize_nodes: (Entity, Entity)
+        base_node: Option<Entity>,
+        drag_node: Option<Entity>,
+        resize_node: Option<Entity>
     ) -> Self {
-            Territory { expanse, z_index, base_node, frame_node, drag_node, resize_nodes }
+            Territory { expanse, z_index, base_node, drag_node, resize_node }
         }
 
     /// Creates a [`Territory`] with all zero-sized [`Rect`]s.
@@ -491,43 +493,19 @@ impl Territory {
     }
 
     /// Gets the current base node.
-    pub fn base_node(&self) -> Entity {
+    pub fn base_node(&self) -> Option<Entity> {
         self.base_node
     }
 
-    /// Gets the current frame node.
-    pub fn frame_node(&self) -> Entity {
-        self.frame_node
-    }
-
     /// Gets the current drag node.
-    pub fn drag_node(&self) -> Entity {
+    pub fn drag_node(&self) -> Option<Entity> {
         self.drag_node
     }
 
     /// Gets the current resize nodes.
-    pub fn resize_nodes(&self) -> (Entity, Entity) {
-        self.resize_nodes
+    pub fn resize_node(&self) -> Option<Entity> {
+        self.resize_node
     }
-
-    pub fn base_node_template(&self) -> impl Bundle {
-        (
-            Name::new("[NODE] Territory Base Node"),
-            NodeBundle {
-                style: Style {
-                    position_type: PositionType::Absolute,
-                    width: Val::Percent(self.expanse.relative_screenspace.width() * 100.0),
-                    height: Val::Percent(self.expanse.relative_screenspace.height() * 100.0),
-                    left: Val::Percent(self.expanse.relative_screenspace.min.x * 100.0),
-                    top: Val::Percent(self.expanse.relative_screenspace.min.y * 100.0),
-                    ..default()
-                },
-                background_color: BackgroundColor(Color::GRAY),
-                ..default()
-            }
-        )
-    }
-
 
 }
 
