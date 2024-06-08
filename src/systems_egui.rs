@@ -3,6 +3,7 @@ use bevy_egui::{egui, EguiContext};
 
 use crate::components_ui::*;
 use crate::resources_ui::*;
+use crate::components_territory::*;
 use crate::systems_common::TerritoryTabsState;
 
 // Insert egui related resources.
@@ -12,7 +13,7 @@ pub fn initialize_egui_resources (mut commands: Commands) {
 
 // egui Debug Info Window until we get Tabs up and running.
 pub fn display_debug_info_with_egui(
-    territory_tabs_current_state: Res<State<TerritoryTabsState>>,
+    territory_tabs_current_state: Res<State<TerritoryTabsMode>>,
     mut window_query: Query<(Entity, &Window, &mut EguiContext)>
 ) {
     for (window_entity, window, mut context) in &mut window_query {
@@ -82,14 +83,14 @@ pub fn display_territory_egui (
                 // Some fighting and hair-pulling may be required. 
                 let requested_egui_rect = egui::Rect::from_center_size(
                     egui::Pos2::new(
-                        territory.screenspace_rect().center().x, 
-                        territory.screenspace_rect().center().y
+                        territory.expanse.screenspace().center().x, 
+                        territory.expanse.screenspace().center().y
                     ), 
                     egui::Vec2::new(
-                        territory.screenspace_rect().size().x,
+                        territory.expanse.screenspace().size().x,
                     //    - territory_settings.inner_margins.x * 2.0
                     //    - territory_settings.spacing, 
-                        territory.screenspace_rect().size().y
+                        territory.expanse.screenspace().size().y
                     //    - territory_settings.inner_margins.y * 2.0
                     //    - territory_settings.spacing
                     )
@@ -177,35 +178,46 @@ pub fn display_territory_egui (
                                     if bg_response.dragged() && delta_size.abs().length() == 0.0 {
                                         debug!("MoveRequest drag delta change sent: {:?}", bg_response.drag_delta());
                                         let move_requested = 
-                                            MoveRequest::from_screenspace_rect(
-                                                Rect::from_center_size(
-                                                    Vec2::new(
+                                            MoveRequest::new(
+                                                RectKit::from_screenspace(
+                                                    Rect::from_center_size(
+                                                        Vec2::new(
                                                         actual_egui_rect.center().x + bg_response.drag_delta().x,
                                                         actual_egui_rect.center().y + bg_response.drag_delta().y
-                                                    ), 
-                                                    Vec2::new(
+                                                        ), 
+                                                        Vec2::new(
                                                         actual_egui_rect.size().x, 
                                                         actual_egui_rect.size().y
-                                                    )
-                                                )
+                                                        )
+                                                    ),
+                                                window.width(),
+                                                window.height()
+                                                ),
+                                                MoveRequestType::Unknown
                                             );
                                         commands.entity(territory_entity).insert(move_requested);
                                     }
                                     else if !bg_response.dragged() && delta_size.abs().length() > 0.0 {
                                         debug!("MoveRequest resize delta change sent: {:?}", delta_size);
+                                        
 
                                         let move_requested = 
-                                            MoveRequest::from_screenspace_rect(
-                                                Rect::from_corners(
-                                                    Vec2::new(
-                                                        actual_egui_rect.min.x, 
-                                                        actual_egui_rect.min.y
+                                            MoveRequest::new(
+                                                RectKit::from_screenspace(
+                                                    Rect::from_corners(
+                                                        Vec2::new(
+                                                            actual_egui_rect.min.x, 
+                                                            actual_egui_rect.min.y
+                                                        ), 
+                                                        Vec2::new(
+                                                            actual_egui_rect.max.x, 
+                                                            actual_egui_rect.max.y
+                                                        )
                                                     ), 
-                                                    Vec2::new(
-                                                        actual_egui_rect.max.x, 
-                                                        actual_egui_rect.max.y
-                                                    )
-                                                )
+                                                    window.width(), 
+                                                    window.height()
+                                                ),
+                                                MoveRequestType::Unknown
                                             );
                                         commands.entity(territory_entity).insert(move_requested);
                                     }

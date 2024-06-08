@@ -1,5 +1,6 @@
 use bevy::prelude::*;
 use bevy_egui::EguiPlugin;
+use sickle_ui::SickleUiPlugin;
 
 use megalith::ui::*;
 
@@ -12,6 +13,7 @@ fn main() {
             ..Default::default()
         }))
         .add_plugins(EguiPlugin)
+        .add_plugins(SickleUiPlugin)
         .add_plugins(TerritoryTabsPlugin)
         .run();
 

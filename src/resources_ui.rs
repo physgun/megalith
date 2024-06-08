@@ -40,7 +40,7 @@ impl Default for TerritorySettings{
         TerritorySettings {
             min_size: Vec2 {x: 20.0, y: 20.0},
             default_size: Vec2 {x: 200.0, y: 100.0},
-            inner_margins: Vec2{x: 3.01, y: 3.01},
+            inner_margins: Vec2 {x: 3.01, y: 3.01},
             spacing: 2.55
         }
     }

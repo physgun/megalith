@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use leafwing_input_manager::prelude::*;
 
-use crate::components_ui::*;
+use crate::components_territory::*;
 
 #[derive(Actionlike, PartialEq, Eq, Clone, Copy, Hash, Debug, Reflect)]
 pub enum DevControls {
