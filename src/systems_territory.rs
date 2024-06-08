@@ -4,6 +4,7 @@ use std::f32::consts::FRAC_PI_4;
 use std::f32::consts::PI;
 
 use bevy::prelude::*;
+use bevy::render::view::RenderLayers;
 use bevy::window::*;
 use bevy::render::camera::*;
 
@@ -22,6 +23,10 @@ impl Plugin for TerritoryPlugin {
             .insert_state(TerritoryTabsMode::Operating)
             .add_event::<MoveRequestApplied>()
             .add_event::<TerritorySpawnRequest>()
+            .add_event::<TerritoryDespawnRequest>()
+            .add_systems(Startup, 
+                configure_gizmos
+            )
             .add_systems(Update, (
                 (
                     configure_os_window
@@ -32,8 +37,12 @@ impl Plugin for TerritoryPlugin {
                     .chain()
                     .in_set(WindowConfig),
                 (
-                    spawn_territory,
-                    spawn_territory_sickle,
+                    spawn_territory
+                        .run_if(on_event::<TerritorySpawnRequest>()),
+                    spawn_territory_sickle
+                        .run_if(on_event::<TerritorySpawnRequest>()),
+                    despawn_territory
+                        .run_if(on_event::<TerritoryDespawnRequest>()),
                     display_debug_gizmos
                 )
                     .chain()
@@ -100,9 +109,32 @@ pub struct MoveRequestApplied;
 /// Sent when a system has commanded a [`Territory`] to spawn in a `Window` `Entity`.
 #[derive(Event)]
 pub struct TerritorySpawnRequest {
+    /// The [`Window`] that the new [`Territory`] will be a child of.
     pub window_entity: Entity,
+    /// Where the [`Territory`] should be.
     pub expanse: RectKit,
+    /// How the [`Territory`] should be represented in UI.
     pub display_library: DisplayLibrary
+}
+
+/// Sent when a system has commanded a [`Territory`] to despawn.
+#[derive(Event)]
+pub struct TerritoryDespawnRequest {
+    /// [`Entity`] to be despawned.
+    pub despawned_territory: Entity
+}
+
+/// Make debug gizmos not be covered up by nodes.
+pub fn configure_gizmos (
+    mut gizmo_central_resource: ResMut<GizmoConfigStore>
+) {
+    let new_default_config = GizmoConfig {
+        depth_bias: -1.0,
+        render_layers: RenderLayers::layer(1),
+        ..default()
+    };
+
+    gizmo_central_resource.insert(new_default_config, DefaultGizmoConfigGroup);
 }
 
 /// Debug gizmos!
@@ -115,7 +147,7 @@ pub fn display_debug_gizmos (
             territory.expanse.worldspace().center(), 
             0.0,
             territory.expanse.worldspace().size(),
-            Color::BLUE
+            Color::BLUE,
         );
     }
 }
@@ -157,7 +189,7 @@ pub fn configure_os_window(
                         height: Val::Percent(100.0),
                         ..default()
                     },
-                    background_color: BackgroundColor(Color::DARK_GRAY),
+                    background_color: BackgroundColor(Color::rgb_u8(108, 52, 40)),
                     ..default()
                 },
                 TargetCamera(child_camera),
@@ -229,8 +261,8 @@ pub fn empty_if_no_territories (
 
 /// Debug system Removes all entities with [`Territory`] when the dev key chord event is read..
 pub fn test_delete_all_territories (
-    mut commands: Commands,
     mut remove_territories_key_pressed: EventReader<RemoveTerritoriesKeyPressed>,
+    mut despawn_territory_request:EventWriter<TerritoryDespawnRequest>,
     window_query: Query<&Children, With<Window>>,
     territory_query: Query<Entity, With<Territory>>
 ) {
@@ -238,7 +270,7 @@ pub fn test_delete_all_territories (
         for window_children in & window_query {
             let mut territories = territory_query.iter_many(window_children);
             while let Some(territory_entity) =  territories.fetch_next(){
-                commands.entity(territory_entity).despawn_recursive();
+                despawn_territory_request.send(TerritoryDespawnRequest { despawned_territory: territory_entity });
             }
         }
     }

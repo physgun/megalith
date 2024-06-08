@@ -40,7 +40,8 @@ pub struct TerritoryTabsCamera;
 #[derive(Component)]
 /// Identifies the UI Root Node associated with a [`Window`] [`Entity`].
 pub struct TerritoryTabsUIRoot {
-    /// The [`Window`] [`Entity`] this root node marker component is associated with.  
+    /// The [`Window`] [`Entity`] this root node marker component is associated with, but not attached directly to.
+    /// This is a different [`Entity`] than the one the root node bundle & [`TerritoryTabsUIRoot`] is attached to!  
     /// \
     /// bevy_ui queries for root nodes by looking for nodes without a [`Parent`], so the root node can't be connected
     /// to the [`Window`] that way. Another use case for entity relations, when they get here!
@@ -445,13 +446,11 @@ pub struct TabTrim {
 pub struct Territory {
     /// Collection of [`Rect`]s describing the [`Territory`]'s location in the `Window`.
     pub expanse: RectKit,
-    /// What z-level the [`Territory`]'s base node will occupy.
-    pub z_index: Option<usize>,
     /// [`Entity`] ID of the base container node, covering the entire size of the [`Territory`].
     pub base_node: Option<Entity>,
     /// [`Entity`] ID of the node area where the [`Territory`] will sense drag interactions.
     pub drag_node: Option<Entity>,
-    /// [`Entity`] ID of the border resize node.
+    /// [`Entity`] ID of the base resize grid node.
     pub resize_node: Option<Entity>
 
 }
@@ -459,7 +458,6 @@ impl Default for Territory {
     fn default() -> Self {
         Territory {
             expanse: RectKit::default(),
-            z_index: Default::default(),
             base_node: None,
             drag_node: None,
             resize_node: None
@@ -469,12 +467,11 @@ impl Default for Territory {
 impl Territory {
     pub fn new(
         expanse: RectKit,
-        z_index: Option<usize>,
         base_node: Option<Entity>,
         drag_node: Option<Entity>,
         resize_node: Option<Entity>
     ) -> Self {
-            Territory { expanse, z_index, base_node, drag_node, resize_node }
+            Territory { expanse, base_node, drag_node, resize_node }
         }
 
     /// Creates a [`Territory`] with all zero-sized [`Rect`]s.
@@ -485,11 +482,6 @@ impl Territory {
     /// Gets the [`RectKit`] containing all of the location [`Rect`]s. 
     pub fn expanse(&self) -> RectKit {
         self.expanse
-    }
-
-    /// Gets the z-level of the base [`Territory`] node, if it exists.
-    pub fn z_index(&self) -> Option<usize> {
-        self.z_index
     }
 
     /// Gets the current base node.
