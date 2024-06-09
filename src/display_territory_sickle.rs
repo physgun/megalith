@@ -1,47 +1,38 @@
-use bevy::prelude::*;
-use bevy::window::*;
+//! UI display logic for representing [`Territory`] functions using the sickle_ui library.
+//! In addition, much of the code in this file is copied from sickle_ui and repurposed to suite the context of the project.
 
-use sickle_ui::ui_builder::UiBuilder;
-use sickle_ui::ui_builder::UiBuilderExt;
-use sickle_ui::ui_builder::UiRoot;
-use sickle_ui::ui_style::*;
-use sickle_ui::widgets::container::UiContainerExt;
+use bevy::prelude::*;
+use sickle_ui::{drag_interaction::Draggable, TrackedInteraction};
 
 use crate::components_territory::*;
-use crate::systems_territory::*;
-use crate::display_territory::*;
 
-/// Follow-up config for any [`Window`] with [`DisplayLibrary::BevySickle`].
-/// Summoned by a [`WindowCreated`] event and configures that exact window.
-/// Must run after the default [`configure_os_window`].
-pub fn configure_os_window_sickle (
-    mut commands: Commands,
-    mut window_spawn_detected_events: EventReader<WindowCreated>,
-    window_query: Query<
-        &DisplayLibrary,
-        (With<TerritoryTabs>, With<Window>)
-        >,
-    ui_camera_query: Query<
-        (Entity, &Parent), 
-        With<TerritoryTabsCamera>
-        >
-) {
-    for event in window_spawn_detected_events.read() {
-        if let Ok(display_library) = window_query.get(event.window){
-            if matches!(display_library, DisplayLibrary::BevySickle) {
-                
-            }
-        }
-    }
-}
-
+/// Follow-up config for any [`Territory`] with [`DisplayLibrary::BevySickle`].
+/// Runs after [`crate::display_territory::spawn_territory`].  
+/// \
+/// [`Territory`] must have stored the associated [`Entity`] IDs of a valid drag node and resize node representing it.
+/// At least, it will have to, until entity relations gets here!
 pub fn spawn_territory_sickle (
     mut commands: Commands,
-    mut territory_spawn_request_event: EventReader<TerritorySpawnRequest>,
-    window_ui_root_query: Query<Entity, With<TerritoryTabsUIRoot>>
+    mut territory_query: Query<
+    (Entity, &Territory, &DisplayLibrary),
+    Added<Territory>>,
+    territory_drag_node_query: Query<(Entity, &TerritoryDragNode)>,
+    territory_resize_node_query: Query<(Entity, &TerritoryResizeGridNode)>,
 ) {
-    for spawn_event in territory_spawn_request_event.read() {
-        if matches!(spawn_event.display_library, DisplayLibrary::BevySickle) {
+    for (mut territory_entity, mut territory, display_library) in & territory_query {
+        if matches!(display_library, DisplayLibrary::BevySickle) {
+
+            let Some(drag_node_entity) = territory.drag_node() else {
+                error!("Sickle spawner did not find associated drag node for Territory!");
+                break;
+            };
+            let Some(resize_node_entity) = territory.resize_node() else {
+                error!("Sickle spawner did not find associated resize node for Territory!");
+                break;
+            };
+
+            commands.entity(drag_node_entity).insert((TrackedInteraction::default(), Draggable::default()));
+
 
         }
     }

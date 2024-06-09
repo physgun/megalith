@@ -11,6 +11,7 @@ pub trait TerritoryNodes{
     fn border_node_template(&self) -> impl Bundle;
     fn drag_node_template(&self) -> impl Bundle;
     fn resize_node_template(&self) -> impl Bundle;
+    fn resize_button_template(&self) -> impl Bundle;
 }
 
 impl TerritoryNodes for Territory {
@@ -70,11 +71,14 @@ impl TerritoryNodes for Territory {
                 style: Style {
                     width: Val::Percent(100.0),
                     height: Val::Percent(100.0),
-                    padding: UiRect::all(Val::Px(2.0)),
+                    border: UiRect::all(Val::Px(2.0)),
                     ..default()
                 },
+                border_color: BorderColor(Color::GREEN),
+                background_color: BackgroundColor(Color::DARK_GREEN),
                 ..default()
-            }
+            },
+            TerritoryDragNode
         )
     }
 
@@ -88,21 +92,40 @@ impl TerritoryNodes for Territory {
             GridTrack::px(4.0)
         ];
         (
-            Name::new("[Node] Territory Resize Grid Node"),
+            Name::new("[NODE] Territory Resize Grid Node"),
             NodeBundle {
                 style: Style {
+                    position_type: PositionType::Absolute,
                     display: Display::Grid,
                     width: Val::Percent(100.0),
                     height: Val::Percent(100.0),
                     grid_template_rows: resize_grid.clone(),
                     grid_template_columns: resize_grid.clone(),
-                    row_gap: Val::Px(1.0),
-                    column_gap: Val::Px(1.0),
                     ..default()
                 },
                 z_index: ZIndex::Local(10), // Grid needs to sit on top of both the border and the drag node.
                 ..default()
-            }
+            },
+            TerritoryResizeGridNode
+        )
+    }
+
+    /// Returns a [`Bundle`] of a template, named, [`Node`] for an individual resize button.  
+    /// \
+    /// There should be eight of these spawned, for each direction, and placed into the outer edges of the resize node grid.
+    fn resize_button_template(&self) -> impl Bundle {
+        (
+            Name::new("[NODE] Territory Resize Button Node - NO DIRECTION SET"),
+            ButtonBundle {
+                style: Style {
+                    display: Display::Grid,
+                    width: Val::Percent(100.0),
+                    height: Val::Percent(100.0),
+                    ..default()
+                },
+                ..default()
+            },
+            TerritoryResizeButtonNode
         )
     }
 
@@ -155,8 +178,9 @@ pub fn spawn_territory (
                 let resize_node_entity = commands.spawn(new_territory.resize_node_template()).id();
 
                 commands.entity(base_node_entity).add_child(border_node_entity);
-                commands.entity(base_node_entity).add_child(resize_node_entity);
                 commands.entity(border_node_entity).add_child(drag_node_entity);
+
+                commands.entity(base_node_entity).add_child(resize_node_entity);
 
                 base_node_option = Some(base_node_entity);
                 drag_node_option = Some(drag_node_entity);
@@ -197,8 +221,8 @@ pub fn despawn_territory (
     for despawn_event in territory_despawn_request_event.read() {
         if let Ok(despawning_territory) = territory_query.get(despawn_event.despawned_territory) {
             // Despawn base UI Node, if it exists.
-            if despawning_territory.base_node().is_some() {
-                commands.entity(despawning_territory.base_node.unwrap()).despawn_recursive();
+            if let Some(despawning_base_node) = despawning_territory.base_node() {
+                commands.entity(despawning_base_node).despawn_recursive();
             }
             // Despawn Territory.
             commands.entity(despawn_event.despawned_territory).despawn_recursive();

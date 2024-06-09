@@ -19,7 +19,7 @@ pub struct TerritoryPlugin;
 impl Plugin for TerritoryPlugin {
     fn build(&self, app: &mut App) {
         app
-            .init_resource::<TerritorySizeSettings>()
+            .init_resource::<GlobalTerritorySettings>()
             .insert_state(TerritoryTabsMode::Operating)
             .add_event::<MoveRequestApplied>()
             .add_event::<TerritorySpawnRequest>()
@@ -31,8 +31,6 @@ impl Plugin for TerritoryPlugin {
                 (
                     configure_os_window
                         .run_if(on_event::<WindowCreated>()),
-                    configure_os_window_sickle
-                        .run_if(on_event::<WindowCreated>())
                 )
                     .chain()
                     .in_set(WindowConfig),
@@ -129,8 +127,7 @@ pub fn configure_gizmos (
     mut gizmo_central_resource: ResMut<GizmoConfigStore>
 ) {
     let new_default_config = GizmoConfig {
-        depth_bias: -1.0,
-        render_layers: RenderLayers::layer(1),
+        render_layers: RenderLayers::layer(0),
         ..default()
     };
 
@@ -236,7 +233,7 @@ pub fn empty_if_no_territories (
     if territory_query.is_empty() {
         match territory_tabs_mode.get() {
             TerritoryTabsMode::Empty => { 
-                warn!("Unexpected transition: Empty -> Empty"); 
+                //warn!("Unexpected transition: Empty -> Empty"); 
             }
             TerritoryTabsMode::Operating => { 
                 set_territory_tabs_mode.set(TerritoryTabsMode::Empty); 
@@ -409,7 +406,7 @@ pub fn territory_move_process_fringe (
 /// If there's still a conflict at the end, remove the [`MoveRequest`].
 pub fn territory_move_check_others (
     mut commands: Commands,
-    territory_settings: Res<TerritorySizeSettings>,
+    territory_settings: Res<GlobalTerritorySettings>,
     window_query: Query<
         (&Window, &Children), 
         With<TerritoryTabs>
