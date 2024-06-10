@@ -4,7 +4,6 @@ use std::f32::consts::FRAC_PI_4;
 use std::f32::consts::PI;
 
 use bevy::prelude::*;
-use bevy::render::view::RenderLayers;
 use bevy::window::*;
 use bevy::render::camera::*;
 
@@ -55,10 +54,11 @@ impl Plugin for TerritoryPlugin {
                             .run_if(on_event::<RemoveTerritoriesKeyPressed>())
                     ) .in_set(TerritoryUpdateState),
                     (
-                    territory_move_eval_type,
-                    territory_move_process_fringe,
-                    territory_move_check_others,
-                    territory_move_apply_proposed
+                        territory_move_request_sickle,
+                        territory_move_eval_type,
+                        territory_move_process_fringe,
+                        territory_move_check_others,
+                        territory_move_apply_proposed
                     )
                         .chain()
                         .in_set(TerritoryUpdateMotion)
@@ -126,12 +126,8 @@ pub struct TerritoryDespawnRequest {
 pub fn configure_gizmos (
     mut gizmo_central_resource: ResMut<GizmoConfigStore>
 ) {
-    let new_default_config = GizmoConfig {
-        render_layers: RenderLayers::layer(0),
-        ..default()
-    };
-
-    gizmo_central_resource.insert(new_default_config, DefaultGizmoConfigGroup);
+    let (config, _) = gizmo_central_resource.config_mut::<DefaultGizmoConfigGroup>();
+    config.depth_bias = -1.0;
 }
 
 /// Debug gizmos!

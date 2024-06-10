@@ -520,7 +520,9 @@ pub enum MoveRequestType {
     /// Some display libraries are unable to send information about if the UI element is being dragged or resized.
     /// [`MoveRequest`] processing systems will determine the movement type if handed a [`MoveRequestType::Unknown`].
     Unknown,
+    /// The movement changes the [`Rect`]'s position but not its size.
     Drag,
+    /// The movement changes the [`Rect`]'s size and/or position.
     Resize
 }
 
