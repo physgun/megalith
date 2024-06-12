@@ -51,7 +51,8 @@ impl TerritoryNodes for Territory {
                 background_color: BackgroundColor(Color::rgb_u8(223, 168, 120)),
                 focus_policy: bevy::ui::FocusPolicy::Block,
                 ..default()
-            }
+            },
+            TerritoryBaseNode
         )
     }
 
@@ -291,5 +292,28 @@ pub fn despawn_territory (
             // Despawn Territory.
             commands.entity(despawn_event.despawned_territory).despawn_recursive();
         }
+    }
+}
+
+/// When detecting a [`Territory`] change, update the position of its base node.
+pub fn update_territory_base_node (
+    territory_query: Query<&Territory, Changed<Territory>>,
+    mut base_node_query: Query<&mut Style, With<TerritoryBaseNode>>
+) {
+    for territory in & territory_query {
+
+        let Some(base_node_entity) = territory.base_node() else {
+            continue;
+        };
+
+        let Ok(mut base_node_style) = base_node_query.get_mut(base_node_entity) else {
+            continue;
+        };
+
+        base_node_style.width = Val::Percent(territory.expanse.relative_screenspace.width() * 100.0);
+        base_node_style.height = Val::Percent(territory.expanse.relative_screenspace.height() * 100.0);
+        base_node_style.left = Val::Percent(territory.expanse.relative_screenspace.min.x * 100.0);
+        base_node_style.top = Val::Percent(territory.expanse.relative_screenspace.min.y * 100.0);
+
     }
 }

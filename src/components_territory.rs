@@ -48,6 +48,10 @@ pub struct TerritoryTabsUIRoot {
     pub associated_window_entity: Entity
 }
 
+/// Denotes the [`Entity`] as containing the base node for a [`Territory`] [`Entity`].
+#[derive(Component)]
+pub struct TerritoryBaseNode;
+
 /// Denotes the [`Entity`] as containing the drag node for a [`Territory`] [`Entity`].
 #[derive(Component)]
 pub struct TerritoryDragNode;

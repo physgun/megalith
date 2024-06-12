@@ -10,6 +10,7 @@ use bevy::render::camera::*;
 use crate::components_territory::*;
 use crate::display_territory::*;
 use crate::display_territory_sickle::*;
+use crate::display_territory_sickle_customdraggable::*;
 use crate::input_manager::*;
 
 
@@ -18,6 +19,7 @@ pub struct TerritoryPlugin;
 impl Plugin for TerritoryPlugin {
     fn build(&self, app: &mut App) {
         app
+            .add_plugins(CustomDragInteractionPlugin)
             .init_resource::<GlobalTerritorySettings>()
             .insert_state(TerritoryTabsMode::Operating)
             .add_event::<MoveRequestApplied>()
@@ -40,7 +42,7 @@ impl Plugin for TerritoryPlugin {
                         .run_if(on_event::<TerritorySpawnRequest>()),
                     despawn_territory
                         .run_if(on_event::<TerritoryDespawnRequest>()),
-                    display_debug_gizmos
+                    display_debug_gizmos,
                 )
                     .chain()
                     .in_set(TerritoryDisplay),
@@ -48,13 +50,15 @@ impl Plugin for TerritoryPlugin {
 
                     (
                         empty_if_no_territories
-                            .run_if(territory_removed.or_else(territory_spawned))
-                            .before(test_delete_all_territories),
+                            .run_if(territory_removed.or_else(territory_spawned)),
                         test_delete_all_territories
-                            .run_if(on_event::<RemoveTerritoriesKeyPressed>())
-                    ) .in_set(TerritoryUpdateState),
-                    (
+                            .run_if(on_event::<RemoveTerritoriesKeyPressed>()),
+                        update_territory_base_node,
                         territory_move_request_sickle,
+                    ) 
+                        .chain()
+                        .in_set(TerritoryUpdateState),
+                    (
                         territory_move_eval_type,
                         territory_move_process_fringe,
                         territory_move_check_others,
@@ -273,10 +277,10 @@ pub fn test_delete_all_territories (
 /// Any [`Locked`] [`Territory`]s will have their [`MoveRequest`] component removed.
 pub fn territory_move_eval_type (
     mut commands: Commands,
-    window_query: Query<(&Window, &Children), With<TerritoryTabs>>,
+    window_query: Query<&Children, (With<Window>, With<TerritoryTabs>)>,
     mut moving_territories_query: Query<(Entity, &Territory, Option<&Locked>, &mut MoveRequest)>
 ) {
-    for (window, window_children) in & window_query {
+    for window_children in & window_query {
         let mut moving_territories = moving_territories_query.iter_many_mut(window_children);
         while let Some(
             (territory_entity, territory, territory_locked, mut move_request)
@@ -286,14 +290,6 @@ pub fn territory_move_eval_type (
             if let Some(_locked) = territory_locked {
                 commands.entity(territory_entity).remove::<MoveRequest>();
                 continue;
-            }
-
-            if !move_request.proposed_expanse.worldspace().is_empty() && move_request.proposed_expanse.screenspace().is_empty() {
-                move_request.proposed_expanse.world_to_screen(window.width(), window.height());
-            }
-            
-            if !move_request.proposed_expanse.screenspace().is_empty() && move_request.proposed_expanse.worldspace().is_empty() {
-                move_request.proposed_expanse.screen_to_world(window.width(), window.height());
             }
 
             match move_request.move_type() {
@@ -308,13 +304,12 @@ pub fn territory_move_eval_type (
                     if territory.expanse.worldspace().height() == move_request.proposed_expanse.worldspace().height()
                     && territory.expanse.worldspace().width() == move_request.proposed_expanse.worldspace().width() {
                         move_request.move_type_drag();
-                        //debug!("MoveRequest type changed to Drag!");
                     }
                     else {
                         move_request.move_type_resize();
-                        //debug!("MoveRequest type changed to Resize!");
                     }
                 },
+
                 MoveRequestType::Drag | MoveRequestType::Resize => {continue}
             };
         }

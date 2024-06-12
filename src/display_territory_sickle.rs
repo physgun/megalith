@@ -2,16 +2,10 @@
 //! In addition, some of the code design in this file is loosely copied from sickle_ui.
 
 use bevy::prelude::*;
-use sickle_ui::{
-    animated_interaction::{AnimatedInteraction, AnimationConfig}, 
-    drag_interaction::Draggable, 
-    interactions::InteractiveBackground, 
-    resize_interaction::ResizeHandle, 
-    FluxInteraction, 
-    TrackedInteraction}
-    ;
+use sickle_ui::TrackedInteraction;
 
 use crate::components_territory::*;
+use crate::display_territory_sickle_customdraggable::*;
 
 /// Extension trait for adding sickle_ui related functionality to Territory Tabs types.
 pub trait SickleInterface {
@@ -26,10 +20,10 @@ pub trait SickleInterface {
 pub fn spawn_territory_sickle (
     mut commands: Commands,
     territory_query: Query<
-    (Entity, &Territory, &DisplayLibrary),
+    (Entity, &Territory, &DisplayLibrary, &Parent),
     Added<Territory>>
 ) {
-    for (territory_entity, territory, display_library) in & territory_query {
+    for (territory_entity, territory, display_library, territory_parent) in & territory_query {
         if matches!(display_library, DisplayLibrary::BevySickle) {
 
             let Some(drag_node_entity) = territory.drag_node() else {
@@ -43,7 +37,10 @@ pub fn spawn_territory_sickle (
 
             commands.entity(drag_node_entity).insert((
                 TrackedInteraction::default(), 
-                Draggable::default()
+                CustomDraggable {
+                    window_entity: territory_parent.get(),
+                    ..default()
+                }
             ));
 
 
@@ -51,11 +48,7 @@ pub fn spawn_territory_sickle (
     }
 }
 
-/// Reads sickle_ui's [`Draggable`] component for a difference and creates a [`MoveRequest`] for the [`Territory`] if one exists.  
-/// \
-/// \
-/// ## Panics ##
-/// Panics when there is more than one [`Window`] as sickle_ui's drag interaction relies on [`PrimaryWindow`].
+/// Reads sickle_ui's [`Draggable`] component for a difference and creates a [`MoveRequest`] for the [`Territory`] if there's a diff.  
 pub fn territory_move_request_sickle (
     mut commands: Commands,
     window_query: Query<
@@ -63,18 +56,43 @@ pub fn territory_move_request_sickle (
         With<TerritoryTabs>
     >,
     territory_drag_query: Query<
-        (Entity, &Territory, &Draggable),
-        (Changed<Draggable>, With<TerritoryDragNode>)
+        (Entity, &Territory, &DisplayLibrary)
+    >,
+    drag_node_query: Query<
+        &CustomDraggable,
+        (Changed<CustomDraggable>, With<TerritoryDragNode>)
     >
 ) {
     for (window, window_children) in & window_query {
 
-        for (territory_entity, territory, drag_data) in territory_drag_query.iter_many(window_children) {
-            let Some(drag_delta) = drag_data.diff else {
-                debug!("No drag diff found!");
+        for (territory_entity, territory, display_library) in territory_drag_query.iter_many(window_children) {
+
+            // This system will only process a Territory that is being represented by sickle.
+            if !matches!(display_library, DisplayLibrary::BevySickle) {
+                continue;
+            }
+
+            // Did someone forget to associate a drag node with this Territory?
+            let Some(drag_node_entity) = territory.drag_node() else {
+                warn!("Found a Territory without a drag node!");
                 continue;
             };
-        
+
+            // Does this Territory have a Draggable drag node that was changed recently?
+            let Ok(drag_data) = drag_node_query.get(drag_node_entity) else {
+                continue;
+            };
+
+            // Is there a diff in the drag node's Draggable component? 
+            let Some(drag_delta) = drag_data.diff else {
+                continue;
+            };
+
+            // Is the diff greater than zero? Zero-size diffs can sneak in at drag end.
+            if drag_delta == Vec2::ZERO { 
+                continue; 
+            }
+
             let new_move_request = MoveRequest {
                 proposed_expanse: RectKit::from_screenspace(
                     Rect::from_center_size(
@@ -88,8 +106,6 @@ pub fn territory_move_request_sickle (
             };
 
             commands.entity(territory_entity).insert(new_move_request);
-            debug!("Added MoveRequest to sickle Territory");
-
 
         }
 
