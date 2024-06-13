@@ -10,7 +10,6 @@ pub mod components_territory;
 pub mod systems_territory;
 pub mod display_territory;
 pub mod display_territory_sickle;
-pub mod display_territory_sickle_customdraggable;
 
 pub mod ui {
     use bevy::prelude::*;

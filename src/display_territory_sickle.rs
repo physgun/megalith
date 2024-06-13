@@ -2,10 +2,9 @@
 //! In addition, some of the code design in this file is loosely copied from sickle_ui.
 
 use bevy::prelude::*;
-use sickle_ui::TrackedInteraction;
+use sickle_ui::{TrackedInteraction, drag_interaction::Draggable};
 
 use crate::components_territory::*;
-use crate::display_territory_sickle_customdraggable::*;
 
 /// Extension trait for adding sickle_ui related functionality to Territory Tabs types.
 pub trait SickleInterface {
@@ -37,10 +36,7 @@ pub fn spawn_territory_sickle (
 
             commands.entity(drag_node_entity).insert((
                 TrackedInteraction::default(), 
-                Draggable {
-                    window_entity: territory_parent.get(),
-                    ..default()
-                }
+                Draggable::default(),
             ));
 
 

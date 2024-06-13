@@ -10,7 +10,6 @@ use bevy::render::camera::*;
 use crate::components_territory::*;
 use crate::display_territory::*;
 use crate::display_territory_sickle::*;
-use crate::display_territory_sickle_customdraggable::*;
 use crate::input_manager::*;
 
 
@@ -19,7 +18,6 @@ pub struct TerritoryPlugin;
 impl Plugin for TerritoryPlugin {
     fn build(&self, app: &mut App) {
         app
-            .add_plugins(CustomDragInteractionPlugin)
             .init_resource::<GlobalTerritorySettings>()
             .insert_state(TerritoryTabsMode::Operating)
             .add_event::<MoveRequestApplied>()
