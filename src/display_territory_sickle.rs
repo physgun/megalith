@@ -37,7 +37,7 @@ pub fn spawn_territory_sickle (
 
             commands.entity(drag_node_entity).insert((
                 TrackedInteraction::default(), 
-                CustomDraggable {
+                Draggable {
                     window_entity: territory_parent.get(),
                     ..default()
                 }
@@ -59,8 +59,8 @@ pub fn territory_move_request_sickle (
         (Entity, &Territory, &DisplayLibrary)
     >,
     drag_node_query: Query<
-        &CustomDraggable,
-        (Changed<CustomDraggable>, With<TerritoryDragNode>)
+        &Draggable,
+        (Changed<Draggable>, With<TerritoryDragNode>)
     >
 ) {
     for (window, window_children) in & window_query {
