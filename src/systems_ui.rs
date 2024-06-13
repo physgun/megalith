@@ -302,7 +302,7 @@ pub fn check_placeholder_types_mouse_moving (
 pub fn calculate_placeholder_data(
     mut gizmos: Gizmos,
     mouse_location_resource: Res<WorldMousePosition>,
-    territory_settings: Res<TerritorySettings>,
+    territory_settings: Res<GlobalTerritorySettings>,
     mut mouse_moved_in_window_events: EventReader<CursorMoved>,
     window_query: Query<&Window>,
     territory_query: Query<(&Parent, &Territory)>,

@@ -5,12 +5,29 @@ use bevy::prelude::*;
 use crate::components_territory::*;
 use crate::systems_territory::*;
 
+/// Every UI library that handles resizing has this exact enum. This idea with having our own here 
+/// is to implement an extension trait for translating to each library, but only in the modules that interact 
+/// with that library. Hopefully this will maintain both a decoupled architecture with the 
+/// display libraries and to keep Territory Tabs flexible with regard to what libraries it can use.
+#[derive(Clone, Copy)]
+pub enum ResizeDirection {
+    North,
+    NorthEast,
+    East,
+    SouthEast,
+    South,
+    SouthWest,
+    West,
+    NorthWest
+}
+
 /// Trait extension for the [`Territory`] component, so I can move all the verbose [`Node`] stuff into its own module. 
 pub trait TerritoryNodes{
     fn base_node_template(&self) -> impl Bundle;
     fn border_node_template(&self) -> impl Bundle;
     fn drag_node_template(&self) -> impl Bundle;
     fn resize_node_template(&self) -> impl Bundle;
+    fn resize_button_template(&self, resize_direction: ResizeDirection) -> impl Bundle;
 }
 
 impl TerritoryNodes for Territory {
@@ -34,7 +51,8 @@ impl TerritoryNodes for Territory {
                 background_color: BackgroundColor(Color::rgb_u8(223, 168, 120)),
                 focus_policy: bevy::ui::FocusPolicy::Block,
                 ..default()
-            }
+            },
+            TerritoryBaseNode
         )
     }
 
@@ -70,11 +88,14 @@ impl TerritoryNodes for Territory {
                 style: Style {
                     width: Val::Percent(100.0),
                     height: Val::Percent(100.0),
-                    padding: UiRect::all(Val::Px(2.0)),
+                    border: UiRect::all(Val::Px(2.0)),
                     ..default()
                 },
+                border_color: BorderColor(Color::NONE),
+                background_color: BackgroundColor(Color::NONE),
                 ..default()
-            }
+            },
+            TerritoryDragNode
         )
     }
 
@@ -88,21 +109,88 @@ impl TerritoryNodes for Territory {
             GridTrack::px(4.0)
         ];
         (
-            Name::new("[Node] Territory Resize Grid Node"),
+            Name::new("[NODE] Territory Resize Grid Node"),
             NodeBundle {
                 style: Style {
+                    position_type: PositionType::Absolute,
                     display: Display::Grid,
                     width: Val::Percent(100.0),
                     height: Val::Percent(100.0),
                     grid_template_rows: resize_grid.clone(),
                     grid_template_columns: resize_grid.clone(),
-                    row_gap: Val::Px(1.0),
-                    column_gap: Val::Px(1.0),
                     ..default()
                 },
                 z_index: ZIndex::Local(10), // Grid needs to sit on top of both the border and the drag node.
                 ..default()
+            },
+            TerritoryResizeGridNode
+        )
+    }
+
+    /// Returns a [`Bundle`] of a template, named, [`Node`] for an individual resize octant button.  
+    /// \
+    /// There should be eight of these spawned, for each direction, and placed into the outer edges of the resize node grid.
+    fn resize_button_template(&self, resize_direction: ResizeDirection) -> impl Bundle {
+        let name;
+        let grid_row_location;
+        let grid_column_location;
+        match resize_direction {
+            ResizeDirection::North => {
+                name = "[NODE] Territory Resize Button Node - North";
+                grid_row_location = GridPlacement::start(1);
+                grid_column_location = GridPlacement::start(2);
+            },
+            ResizeDirection::NorthEast => {
+                name = "[NODE] Territory Resize Button Node - NorthEast";
+                grid_row_location = GridPlacement::start(1);
+                grid_column_location = GridPlacement::start(3);
+            },
+            ResizeDirection::East => {
+                name = "[NODE] Territory Resize Button Node - East";
+                grid_row_location = GridPlacement::start(2);
+                grid_column_location = GridPlacement::start(3);
+            },
+            ResizeDirection::SouthEast => {
+                name = "[NODE] Territory Resize Button Node - SouthEast";
+                grid_row_location = GridPlacement::start(3);
+                grid_column_location = GridPlacement::start(3);
+            },
+            ResizeDirection::South => {
+                name = "[NODE] Territory Resize Button Node - South";
+                grid_row_location = GridPlacement::start(3);
+                grid_column_location = GridPlacement::start(2);
+            },
+            ResizeDirection::SouthWest => {
+                name = "[NODE] Territory Resize Button Node - SouthWest";
+                grid_row_location = GridPlacement::start(3);
+                grid_column_location = GridPlacement::start(1);
+            },
+            ResizeDirection::West => {
+                name = "[NODE] Territory Resize Button Node - West";
+                grid_row_location = GridPlacement::start(2);
+                grid_column_location = GridPlacement::start(1);
+            },
+            ResizeDirection::NorthWest => {
+                name = "[NODE] Territory Resize Button Node - NorthWest";
+                grid_row_location = GridPlacement::start(1);
+                grid_column_location = GridPlacement::start(1);
             }
+        };
+
+        (
+            Name::new(name),
+            ButtonBundle {
+                style: Style {
+                    display: Display::Grid,
+                    width: Val::Percent(100.0),
+                    height: Val::Percent(100.0),
+                    grid_row: grid_row_location,
+                    grid_column: grid_column_location,
+                    ..default()
+                },
+                ..default()
+            },
+            TerritoryResizeButtonNode
         )
     }
 
@@ -155,8 +243,9 @@ pub fn spawn_territory (
                 let resize_node_entity = commands.spawn(new_territory.resize_node_template()).id();
 
                 commands.entity(base_node_entity).add_child(border_node_entity);
-                commands.entity(base_node_entity).add_child(resize_node_entity);
                 commands.entity(border_node_entity).add_child(drag_node_entity);
+
+                commands.entity(base_node_entity).add_child(resize_node_entity);
 
                 base_node_option = Some(base_node_entity);
                 drag_node_option = Some(drag_node_entity);
@@ -197,11 +286,34 @@ pub fn despawn_territory (
     for despawn_event in territory_despawn_request_event.read() {
         if let Ok(despawning_territory) = territory_query.get(despawn_event.despawned_territory) {
             // Despawn base UI Node, if it exists.
-            if despawning_territory.base_node().is_some() {
-                commands.entity(despawning_territory.base_node.unwrap()).despawn_recursive();
+            if let Some(despawning_base_node) = despawning_territory.base_node() {
+                commands.entity(despawning_base_node).despawn_recursive();
             }
             // Despawn Territory.
             commands.entity(despawn_event.despawned_territory).despawn_recursive();
         }
+    }
+}
+
+/// When detecting a [`Territory`] change, update the position of its base node.
+pub fn update_territory_base_node (
+    territory_query: Query<&Territory, Changed<Territory>>,
+    mut base_node_query: Query<&mut Style, With<TerritoryBaseNode>>
+) {
+    for territory in & territory_query {
+
+        let Some(base_node_entity) = territory.base_node() else {
+            continue;
+        };
+
+        let Ok(mut base_node_style) = base_node_query.get_mut(base_node_entity) else {
+            continue;
+        };
+
+        base_node_style.width = Val::Percent(territory.expanse.relative_screenspace.width() * 100.0);
+        base_node_style.height = Val::Percent(territory.expanse.relative_screenspace.height() * 100.0);
+        base_node_style.left = Val::Percent(territory.expanse.relative_screenspace.min.x * 100.0);
+        base_node_style.top = Val::Percent(territory.expanse.relative_screenspace.min.y * 100.0);
+
     }
 }

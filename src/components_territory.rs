@@ -7,7 +7,7 @@ const ICON_SIZE: Vec2 = Vec2 { x: 20.0, y: 20.0 };
 
 /// Settings governing the basic size behavior of all entities with [`Territory`] components. 
 #[derive(Resource)]
-pub struct TerritorySizeSettings {
+pub struct GlobalTerritorySettings {
     /// Smallest possible size of a [`Territory`]. Defaults to the size of a single icon.
     pub min_size: Vec2,
     /// Starting size when spawning a new [`Territory`].
@@ -17,11 +17,11 @@ pub struct TerritorySizeSettings {
     /// Distance of everything outside from the frame of the [`Territory`]. This will govern the space between them.
     pub outer_margins: Vec2
 }
-impl Default for TerritorySizeSettings{
+impl Default for GlobalTerritorySettings{
     fn default() -> Self {
-        TerritorySizeSettings {
+        GlobalTerritorySettings {
             min_size: ICON_SIZE,
-            default_size: Vec2 { x: 200.0, y: 100.0 },
+            default_size: Vec2 { x: 600.0, y: 200.0 },
             inner_margins: Vec2 { x: 3.0, y: 3.0 },
             outer_margins: Vec2 { x: 2.5, y: 2.5 }
         }
@@ -47,6 +47,23 @@ pub struct TerritoryTabsUIRoot {
     /// to the [`Window`] that way. Another use case for entity relations, when they get here!
     pub associated_window_entity: Entity
 }
+
+/// Denotes the [`Entity`] as containing the base node for a [`Territory`] [`Entity`].
+#[derive(Component)]
+pub struct TerritoryBaseNode;
+
+/// Denotes the [`Entity`] as containing the drag node for a [`Territory`] [`Entity`].
+#[derive(Component)]
+pub struct TerritoryDragNode;
+
+/// Denotes the [`Entity`] as containing the resize grid node for a [`Territory`] [`Entity`].
+#[derive(Component)]
+pub struct TerritoryResizeGridNode;
+
+/// Denotes the [`Entity`] as containing the individual resize button node for a [`Territory`] [`Entity`].
+#[derive(Component)]
+pub struct TerritoryResizeButtonNode;
+
 
 /// App State communicating the operating Mode of the `Territory Tabs` UI.
 #[derive(States, Default, Debug, Clone, PartialEq, Eq, Hash)]
@@ -507,7 +524,9 @@ pub enum MoveRequestType {
     /// Some display libraries are unable to send information about if the UI element is being dragged or resized.
     /// [`MoveRequest`] processing systems will determine the movement type if handed a [`MoveRequestType::Unknown`].
     Unknown,
+    /// The movement changes the [`Rect`]'s position but not its size.
     Drag,
+    /// The movement changes the [`Rect`]'s size and/or position.
     Resize
 }
 

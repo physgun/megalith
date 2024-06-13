@@ -4,13 +4,13 @@ use std::f32::consts::FRAC_PI_4;
 use std::f32::consts::PI;
 
 use bevy::prelude::*;
-use bevy::render::view::RenderLayers;
 use bevy::window::*;
 use bevy::render::camera::*;
 
 use crate::components_territory::*;
 use crate::display_territory::*;
 use crate::display_territory_sickle::*;
+use crate::display_territory_sickle_customdraggable::*;
 use crate::input_manager::*;
 
 
@@ -19,7 +19,8 @@ pub struct TerritoryPlugin;
 impl Plugin for TerritoryPlugin {
     fn build(&self, app: &mut App) {
         app
-            .init_resource::<TerritorySizeSettings>()
+            .add_plugins(CustomDragInteractionPlugin)
+            .init_resource::<GlobalTerritorySettings>()
             .insert_state(TerritoryTabsMode::Operating)
             .add_event::<MoveRequestApplied>()
             .add_event::<TerritorySpawnRequest>()
@@ -31,8 +32,6 @@ impl Plugin for TerritoryPlugin {
                 (
                     configure_os_window
                         .run_if(on_event::<WindowCreated>()),
-                    configure_os_window_sickle
-                        .run_if(on_event::<WindowCreated>())
                 )
                     .chain()
                     .in_set(WindowConfig),
@@ -43,7 +42,7 @@ impl Plugin for TerritoryPlugin {
                         .run_if(on_event::<TerritorySpawnRequest>()),
                     despawn_territory
                         .run_if(on_event::<TerritoryDespawnRequest>()),
-                    display_debug_gizmos
+                    display_debug_gizmos,
                 )
                     .chain()
                     .in_set(TerritoryDisplay),
@@ -51,16 +50,19 @@ impl Plugin for TerritoryPlugin {
 
                     (
                         empty_if_no_territories
-                            .run_if(territory_removed.or_else(territory_spawned))
-                            .before(test_delete_all_territories),
+                            .run_if(territory_removed.or_else(territory_spawned)),
                         test_delete_all_territories
-                            .run_if(on_event::<RemoveTerritoriesKeyPressed>())
-                    ) .in_set(TerritoryUpdateState),
+                            .run_if(on_event::<RemoveTerritoriesKeyPressed>()),
+                        update_territory_base_node,
+                        territory_move_request_sickle,
+                    ) 
+                        .chain()
+                        .in_set(TerritoryUpdateState),
                     (
-                    territory_move_eval_type,
-                    territory_move_process_fringe,
-                    territory_move_check_others,
-                    territory_move_apply_proposed
+                        territory_move_eval_type,
+                        territory_move_process_fringe,
+                        territory_move_check_others,
+                        territory_move_apply_proposed
                     )
                         .chain()
                         .in_set(TerritoryUpdateMotion)
@@ -128,13 +130,8 @@ pub struct TerritoryDespawnRequest {
 pub fn configure_gizmos (
     mut gizmo_central_resource: ResMut<GizmoConfigStore>
 ) {
-    let new_default_config = GizmoConfig {
-        depth_bias: -1.0,
-        render_layers: RenderLayers::layer(1),
-        ..default()
-    };
-
-    gizmo_central_resource.insert(new_default_config, DefaultGizmoConfigGroup);
+    let (config, _) = gizmo_central_resource.config_mut::<DefaultGizmoConfigGroup>();
+    config.depth_bias = -1.0;
 }
 
 /// Debug gizmos!
@@ -236,7 +233,7 @@ pub fn empty_if_no_territories (
     if territory_query.is_empty() {
         match territory_tabs_mode.get() {
             TerritoryTabsMode::Empty => { 
-                warn!("Unexpected transition: Empty -> Empty"); 
+                //warn!("Unexpected transition: Empty -> Empty"); 
             }
             TerritoryTabsMode::Operating => { 
                 set_territory_tabs_mode.set(TerritoryTabsMode::Empty); 
@@ -280,10 +277,10 @@ pub fn test_delete_all_territories (
 /// Any [`Locked`] [`Territory`]s will have their [`MoveRequest`] component removed.
 pub fn territory_move_eval_type (
     mut commands: Commands,
-    window_query: Query<(&Window, &Children), With<TerritoryTabs>>,
+    window_query: Query<&Children, (With<Window>, With<TerritoryTabs>)>,
     mut moving_territories_query: Query<(Entity, &Territory, Option<&Locked>, &mut MoveRequest)>
 ) {
-    for (window, window_children) in & window_query {
+    for window_children in & window_query {
         let mut moving_territories = moving_territories_query.iter_many_mut(window_children);
         while let Some(
             (territory_entity, territory, territory_locked, mut move_request)
@@ -293,14 +290,6 @@ pub fn territory_move_eval_type (
             if let Some(_locked) = territory_locked {
                 commands.entity(territory_entity).remove::<MoveRequest>();
                 continue;
-            }
-
-            if !move_request.proposed_expanse.worldspace().is_empty() && move_request.proposed_expanse.screenspace().is_empty() {
-                move_request.proposed_expanse.world_to_screen(window.width(), window.height());
-            }
-            
-            if !move_request.proposed_expanse.screenspace().is_empty() && move_request.proposed_expanse.worldspace().is_empty() {
-                move_request.proposed_expanse.screen_to_world(window.width(), window.height());
             }
 
             match move_request.move_type() {
@@ -315,13 +304,12 @@ pub fn territory_move_eval_type (
                     if territory.expanse.worldspace().height() == move_request.proposed_expanse.worldspace().height()
                     && territory.expanse.worldspace().width() == move_request.proposed_expanse.worldspace().width() {
                         move_request.move_type_drag();
-                        //debug!("MoveRequest type changed to Drag!");
                     }
                     else {
                         move_request.move_type_resize();
-                        //debug!("MoveRequest type changed to Resize!");
                     }
                 },
+
                 MoveRequestType::Drag | MoveRequestType::Resize => {continue}
             };
         }
@@ -409,7 +397,7 @@ pub fn territory_move_process_fringe (
 /// If there's still a conflict at the end, remove the [`MoveRequest`].
 pub fn territory_move_check_others (
     mut commands: Commands,
-    territory_settings: Res<TerritorySizeSettings>,
+    territory_settings: Res<GlobalTerritorySettings>,
     window_query: Query<
         (&Window, &Children), 
         With<TerritoryTabs>
