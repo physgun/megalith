@@ -88,6 +88,75 @@ pub enum DisplayLibrary {
     BevySickle
 }
 
+/// Every UI library that handles resizing has this exact enum. This idea with having our own here 
+/// is to implement an extension trait for translating to each library, but only in the modules that interact 
+/// with that library. Hopefully this will maintain both a decoupled architecture with the 
+/// display libraries and to keep Territory Tabs flexible with regard to what libraries it can use.
+#[derive(Component, Clone, Copy, Debug)]
+pub enum ResizeDirection {
+    North,
+    NorthEast,
+    East,
+    SouthEast,
+    South,
+    SouthWest,
+    West,
+    NorthWest
+}
+
+impl ResizeDirection {
+    
+    /// Width of the resizing bar buttons, and both the height and width of the corner ones.
+    pub const SIZE: f32 = 5.0;
+
+    /// Helper for iterating through all the directions.
+    pub const ALL: [Self; 8] = [
+        Self::North,
+        Self::NorthEast,
+        Self::East,
+        Self::SouthEast,
+        Self::South,
+        Self::SouthWest,
+        Self::West,
+        Self::NorthWest
+    ];
+
+    /// If you're using a 3x3 CSS grid node to place the resize drag buttons, 
+    /// you can use this to get the appropriate (row, column) location.  
+    ///   
+    /// If called on a [`ResizeDirection::West`], then you'll get `(GridPlacement::start(2), GridPlacement::start(1))`.
+    pub fn get_css_grid_location(&self) -> (GridPlacement, GridPlacement) {
+        let (row, column) = match self {
+            Self::North => {( 1, 2) },
+            Self::NorthEast => { (1, 3) },
+            Self::East => { (2, 3 ) },
+            Self::SouthEast => { (3, 3) },
+            Self::South => { (3, 2) },
+            Self::SouthWest => { (3, 1) },
+            Self::West => { (2, 1) },
+            Self::NorthWest => { (1, 1) }
+        };
+        (GridPlacement::start(row), GridPlacement::start(column))
+    }
+
+    /// Add the correct mouse delta [`Vec2`], depending on [`ResizeDirection`], to a [`Rect`] in **screenspace** coordinates.  
+    ///  
+    /// If, say, [`ResizeDirection::SouthWest`], then the returned [`Rect`] will be the result of `rect.min.x += delta.x; rect.max.y += delta.y`:
+    pub fn add_delta_to_rect(&self, mut rect: Rect, delta: Vec2) -> Rect {
+        match self {
+            &Self::North => { rect.min.y += delta.y; },
+            &Self::NorthEast => { rect.min.y += delta.y; rect.max.x += delta.x },
+            &Self::East => { rect.max.x += delta.x },
+            &Self::SouthEast => { rect.max += delta; },
+            &Self::South => { rect.max.y += delta.y },
+            &Self::SouthWest => { rect.min.x += delta.x; rect.max.y += delta.y },
+            &Self::West => { rect.min.x += delta.x },
+            &Self::NorthWest => { rect.min += delta },
+        }
+        rect
+    }
+}
+
 /// A collection of `Bevy` [`Rect`]s that are useful to a variety of UI libraries.  
 /// \
 /// 
@@ -526,8 +595,8 @@ pub enum MoveRequestType {
     Unknown,
     /// The movement changes the [`Rect`]'s position but not its size.
     Drag,
-    /// The movement changes the [`Rect`]'s size and/or position.
-    Resize
+    /// The movement changes the [`Rect`]'s size and/or position. Wraps around a ResizeDirection enum.
+    Resize(ResizeDirection)
 }
 
 /// Marks a [`TerritoryTabs`] UI element as having been commanded to move. Entities with this component will be processed 
@@ -578,9 +647,9 @@ impl MoveRequest {
         self
     }
 
-    /// Changes the `move_type` to `Resize`, marking the UI element as changing size.
-    pub fn move_type_resize(&mut self) -> &mut Self {
-        self.move_type = MoveRequestType::Resize;
+    /// Changes the `move_type` to `Resize`, marking the UI element as changing size in a specific direction.
+    pub fn move_type_resize(&mut self, resize_direction: ResizeDirection) -> &mut Self {
+        self.move_type = MoveRequestType::Resize(resize_direction);
         self
     }
 }

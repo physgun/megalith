@@ -1,3 +1,5 @@
+//! Old code to be refactored later.
+
 use bevy::prelude::*;
 use bevy::window::*;
 use bevy::render::camera::*;

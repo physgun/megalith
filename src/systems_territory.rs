@@ -52,7 +52,8 @@ impl Plugin for TerritoryPlugin {
                         test_delete_all_territories
                             .run_if(on_event::<RemoveTerritoriesKeyPressed>()),
                         update_territory_base_node,
-                        territory_move_request_sickle,
+                        territory_drag_move_request_sickle,
+                        territory_resize_move_request_sickle
                     ) 
                         .chain()
                         .in_set(TerritoryUpdateState),
@@ -184,7 +185,7 @@ pub fn configure_os_window(
                         height: Val::Percent(100.0),
                         ..default()
                     },
-                    background_color: BackgroundColor(Color::rgb_u8(108, 52, 40)),
+                    background_color: BackgroundColor(Color::rgb_u8(21, 52, 72)),
                     ..default()
                 },
                 TargetCamera(child_camera),
@@ -271,7 +272,7 @@ pub fn test_delete_all_territories (
     }
 }
 
-/// Check all [`Territory`]s who have a [`MoveRequest`] component and see what kind of movement they want.
+/// Initial check of all [`Territory`]s who have a [`MoveRequest`] component and catch any odd requests.
 /// Any [`Locked`] [`Territory`]s will have their [`MoveRequest`] component removed.
 pub fn territory_move_eval_type (
     mut commands: Commands,
@@ -281,7 +282,7 @@ pub fn territory_move_eval_type (
     for window_children in & window_query {
         let mut moving_territories = moving_territories_query.iter_many_mut(window_children);
         while let Some(
-            (territory_entity, territory, territory_locked, mut move_request)
+            (territory_entity, territory, territory_locked, move_request)
         ) = moving_territories.fetch_next() {
 
             // A Locked Territory won't process any MoveRequest.
@@ -290,26 +291,12 @@ pub fn territory_move_eval_type (
                 continue;
             }
 
-            match move_request.move_type() {
-                MoveRequestType::Unknown => {
+            if move_request.proposed_expanse.worldspace() == territory.expanse.worldspace() {
+                commands.entity(territory_entity).remove::<MoveRequest>();
+                debug!("MoveRequest found with identical rect to existing rect, and was removed!");
+                continue;
+            }
 
-                    if move_request.proposed_expanse.worldspace() == territory.expanse.worldspace() {
-                        commands.entity(territory_entity).remove::<MoveRequest>();
-                        debug!("MoveRequest found with identical rect to existing rect, and was removed!");
-                        continue;
-                    }
-
-                    if territory.expanse.worldspace().height() == move_request.proposed_expanse.worldspace().height()
-                    && territory.expanse.worldspace().width() == move_request.proposed_expanse.worldspace().width() {
-                        move_request.move_type_drag();
-                    }
-                    else {
-                        move_request.move_type_resize();
-                    }
-                },
-
-                MoveRequestType::Drag | MoveRequestType::Resize => {continue}
-            };
         }
     }
 }
@@ -376,7 +363,7 @@ pub fn territory_move_process_fringe (
                         );
                     }
                 },
-                MoveRequestType::Resize => {
+                MoveRequestType::Resize(_) => {
                     let inbounds_rect = window_rect.intersect(move_request.proposed_expanse.worldspace());
 
                     move_request.proposed_expanse.set_worldspace(
@@ -495,7 +482,7 @@ pub fn territory_move_check_others (
                     }
                 },
 
-                MoveRequestType::Resize => {
+                MoveRequestType::Resize(_) => {
                     let mut other_territories = other_territories_query
                         .iter_many_mut(window_children);
                     while let Some(
@@ -627,9 +614,9 @@ pub fn territory_move_check_others (
 
                         // Find the conflict_rect's sector, which determines what direction we resize the other Territory.
                         let conflict_angle = (
-                            move_request.proposed_expanse.worldspace().center().y - conflict_rect.center().y)
+                            other_territory.expanse.worldspace().center().y - conflict_rect.center().y)
                             .atan2(
-                            move_request.proposed_expanse.worldspace().center().x - conflict_rect.center().x);
+                            other_territory.expanse.worldspace().center().x - conflict_rect.center().x);
 
                         // Second run-through to push other Territories out of our, now valid, resize MoveRequest.
                         // Don't forget to invert the direction of resize, 
@@ -698,7 +685,7 @@ pub fn territory_move_apply_proposed (
                     commands.entity(territory_entity).remove::<MoveRequest>();
                 },
 
-                MoveRequestType::Drag | MoveRequestType::Resize => {
+                MoveRequestType::Drag | MoveRequestType::Resize(_) => {
                     territory.expanse.set_worldspace(
                         move_request.proposed_expanse.worldspace(), 
                         window.width(), 

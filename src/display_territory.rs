@@ -5,22 +5,6 @@ use bevy::prelude::*;
 use crate::components_territory::*;
 use crate::systems_territory::*;
 
-/// Every UI library that handles resizing has this exact enum. This idea with having our own here 
-/// is to implement an extension trait for translating to each library, but only in the modules that interact 
-/// with that library. Hopefully this will maintain both a decoupled architecture with the 
-/// display libraries and to keep Territory Tabs flexible with regard to what libraries it can use.
-#[derive(Clone, Copy)]
-pub enum ResizeDirection {
-    North,
-    NorthEast,
-    East,
-    SouthEast,
-    South,
-    SouthWest,
-    West,
-    NorthWest
-}
-
 /// Trait extension for the [`Territory`] component, so I can move all the verbose [`Node`] stuff into its own module. 
 pub trait TerritoryNodes{
     fn base_node_template(&self) -> impl Bundle;
@@ -48,7 +32,7 @@ impl TerritoryNodes for Territory {
                     overflow: Overflow::clip(),
                     ..default()
                 },
-                background_color: BackgroundColor(Color::rgb_u8(223, 168, 120)),
+                background_color: BackgroundColor(Color::rgb_u8(60, 91, 111)),
                 focus_policy: bevy::ui::FocusPolicy::Block,
                 ..default()
             },
@@ -70,7 +54,7 @@ impl TerritoryNodes for Territory {
                     border: UiRect::all(Val::Px(1.0)),
                     ..default()
                 },
-                border_color: BorderColor(Color::rgb_u8(206, 230, 243)),
+                border_color: BorderColor(Color::rgb_u8(93, 235, 215)),
                 ..default()
             }
         )
@@ -104,9 +88,9 @@ impl TerritoryNodes for Territory {
     /// A simple 3 x 3 CSS Grid for placing the eight resize directions and a central content area.
     fn resize_node_template(&self) -> impl Bundle {
         let resize_grid = vec![
-            GridTrack::px(4.0),
+            GridTrack::px(ResizeDirection::SIZE),
             GridTrack::flex(1.0),
-            GridTrack::px(4.0)
+            GridTrack::px(ResizeDirection::SIZE)
         ];
         (
             Name::new("[NODE] Territory Resize Grid Node"),
@@ -132,48 +116,31 @@ impl TerritoryNodes for Territory {
     /// There should be eight of these spawned, for each direction, and placed into the outer edges of the resize node grid.
     fn resize_button_template(&self, resize_direction: ResizeDirection) -> impl Bundle {
         let name;
-        let grid_row_location;
-        let grid_column_location;
+        let (grid_row_location, grid_column_location) = resize_direction.get_css_grid_location();
         match resize_direction {
             ResizeDirection::North => {
-                name = "[NODE] Territory Resize Button Node - North";
-                grid_row_location = GridPlacement::start(1);
-                grid_column_location = GridPlacement::start(2);
+                name = format!("[NODE] Territory Resize Button Node - {:?}", resize_direction);
             },
             ResizeDirection::NorthEast => {
-                name = "[NODE] Territory Resize Button Node - NorthEast";
-                grid_row_location = GridPlacement::start(1);
-                grid_column_location = GridPlacement::start(3);
+                name = format!("[NODE] Territory Resize Button Node - {:?}", resize_direction);
             },
             ResizeDirection::East => {
-                name = "[NODE] Territory Resize Button Node - East";
-                grid_row_location = GridPlacement::start(2);
-                grid_column_location = GridPlacement::start(3);
+                name = format!("[NODE] Territory Resize Button Node - {:?}", resize_direction);
             },
             ResizeDirection::SouthEast => {
-                name = "[NODE] Territory Resize Button Node - SouthEast";
-                grid_row_location = GridPlacement::start(3);
-                grid_column_location = GridPlacement::start(3);
+                name = format!("[NODE] Territory Resize Button Node - {:?}", resize_direction);
             },
             ResizeDirection::South => {
-                name = "[NODE] Territory Resize Button Node - South";
-                grid_row_location = GridPlacement::start(3);
-                grid_column_location = GridPlacement::start(2);
+                name = format!("[NODE] Territory Resize Button Node - {:?}", resize_direction);
             },
             ResizeDirection::SouthWest => {
-                name = "[NODE] Territory Resize Button Node - SouthWest";
-                grid_row_location = GridPlacement::start(3);
-                grid_column_location = GridPlacement::start(1);
+                name = format!("[NODE] Territory Resize Button Node - {:?}", resize_direction);
             },
             ResizeDirection::West => {
-                name = "[NODE] Territory Resize Button Node - West";
-                grid_row_location = GridPlacement::start(2);
-                grid_column_location = GridPlacement::start(1);
+                name = format!("[NODE] Territory Resize Button Node - {:?}", resize_direction);
             },
             ResizeDirection::NorthWest => {
-                name = "[NODE] Territory Resize Button Node - NorthWest";
-                grid_row_location = GridPlacement::start(1);
-                grid_column_location = GridPlacement::start(1);
+                name = format!("[NODE] Territory Resize Button Node - {:?}", resize_direction);
             }
         };
 
@@ -188,9 +155,11 @@ impl TerritoryNodes for Territory {
                     grid_column: grid_column_location,
                     ..default()
                 },
+                background_color: BackgroundColor(Color::NONE),
                 ..default()
             },
-            TerritoryResizeButtonNode
+            TerritoryResizeButtonNode,
+            resize_direction
         )
     }
 
@@ -246,6 +215,10 @@ pub fn spawn_territory (
                 commands.entity(border_node_entity).add_child(drag_node_entity);
 
                 commands.entity(base_node_entity).add_child(resize_node_entity);
+                for resize_direction in ResizeDirection::ALL {
+                    let new_resize_button = commands.spawn(new_territory.resize_button_template(resize_direction)).id();
+                    commands.entity(resize_node_entity).add_child(new_resize_button);
+                }
 
                 base_node_option = Some(base_node_entity);
                 drag_node_option = Some(drag_node_entity);
