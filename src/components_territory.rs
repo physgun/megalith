@@ -79,6 +79,10 @@ pub enum TerritoryTabsMode {
     MovingTabs
 }
 
+/// User has marked this UI element as `Locked`, and they don't want any systems moving it around!
+#[derive(Component)]
+pub struct Locked;
+
 /// Defines what library will be used to display UI. Add to a `Window` entity to set a default. Add to a `Territory`
 /// or a `Tab` entity to override that default.
 #[derive(Component, Clone, Copy)]
@@ -121,13 +125,44 @@ impl ResizeDirection {
         Self::NorthWest
     ];
 
+    /// Gets the opposite resize direction.
+    pub fn get_opposite(&self) -> Self {
+        match self {
+            Self::North => { ResizeDirection::South },
+            Self::NorthEast => { ResizeDirection::SouthWest },
+            Self::East => { ResizeDirection::West },
+            Self::SouthEast => { ResizeDirection::NorthWest },
+            Self::South => { ResizeDirection::North },
+            Self::SouthWest => { ResizeDirection::NorthEast },
+            Self::West => { ResizeDirection::East },
+            Self::NorthWest => { ResizeDirection::SouthEast }
+        }
+    }
+
+    /// Gets the adjacent sides.  
+    ///   
+    /// If the [`ResizeDirection`] is a corner, gets the connecting sides. If a side, then the corners bordering.
+    /// Ordering is clockwise.
+    pub fn get_both_adjacent(&self) -> (Self, Self) {
+        match self {
+            Self::North => { (ResizeDirection::NorthWest, ResizeDirection::NorthEast) },
+            Self::NorthEast => { (ResizeDirection::North, ResizeDirection::East) },
+            Self::East => { (ResizeDirection::NorthEast, ResizeDirection::SouthEast) },
+            Self::SouthEast => { (ResizeDirection::East, ResizeDirection::South) },
+            Self::South => { (ResizeDirection::SouthEast, ResizeDirection::SouthWest) },
+            Self::SouthWest => { (ResizeDirection::South, ResizeDirection::West) },
+            Self::West => { (ResizeDirection::SouthWest, ResizeDirection::NorthWest) },
+            Self::NorthWest => { (ResizeDirection::West, ResizeDirection::North) }
+        }
+    }
+
     /// If you're using a 3x3 CSS grid node to place the resize drag buttons, 
     /// you can use this to get the appropriate (row, column) location.  
     ///   
     /// If called on a [`ResizeDirection::West`], then you'll get `(GridPlacement::start(2), GridPlacement::start(1))`.
     pub fn get_css_grid_location(&self) -> (GridPlacement, GridPlacement) {
         let (row, column) = match self {
-            Self::North => {( 1, 2) },
+            Self::North => { ( 1, 2) },
             Self::NorthEast => { (1, 3) },
             Self::East => { (2, 3 ) },
             Self::SouthEast => { (3, 3) },
@@ -144,14 +179,14 @@ impl ResizeDirection {
     /// If, say, [`ResizeDirection::SouthWest`], then the returned [`Rect`] will be the result of `rect.min.x += delta.x; rect.max.y += delta.y`:
     pub fn add_delta_to_rect(&self, mut rect: Rect, delta: Vec2) -> Rect {
         match self {
-            &Self::North => { rect.min.y += delta.y; },
-            &Self::NorthEast => { rect.min.y += delta.y; rect.max.x += delta.x },
-            &Self::East => { rect.max.x += delta.x },
-            &Self::SouthEast => { rect.max += delta; },
-            &Self::South => { rect.max.y += delta.y },
-            &Self::SouthWest => { rect.min.x += delta.x; rect.max.y += delta.y },
-            &Self::West => { rect.min.x += delta.x },
-            &Self::NorthWest => { rect.min += delta },
+            Self::North => { rect.min.y += delta.y; },
+            Self::NorthEast => { rect.min.y += delta.y; rect.max.x += delta.x },
+            Self::East => { rect.max.x += delta.x },
+            Self::SouthEast => { rect.max += delta; },
+            Self::South => { rect.max.y += delta.y },
+            Self::SouthWest => { rect.min.x += delta.x; rect.max.y += delta.y },
+            Self::West => { rect.min.x += delta.x },
+            Self::NorthWest => { rect.min += delta },
         }
         rect
     }
@@ -510,19 +545,130 @@ impl RectKit {
     }
 }
 
-/// Denotes what side of the [`Territory`] one of the four [`TabTrim`]s will occupy.
-pub enum TabTrimType {
-    North,
-    East,
-    South,
-    West
+/// Common functionality between the directional tab bars.
+/// We keep the tab bars as separate components for query granularity.
+pub trait TabTrim {
+    
 }
 
-/// Border area of the [`Territory`] that hosts the feature tabs.
+/// Northern border area of the [`Territory`] that hosts the feature tabs.
 #[derive(Component, Clone, Copy)]
-pub struct TabTrim {
+pub struct NorthTabs {
 
 }
+
+impl TabTrim for NorthTabs {
+
+}
+
+/// Eastern border area of the [`Territory`] that hosts the feature tabs.
+#[derive(Component, Clone, Copy)]
+pub struct EastTabs {
+
+}
+
+impl TabTrim for EastTabs {
+
+}
+
+/// Southern border area of the [`Territory`] that hosts the feature tabs.
+#[derive(Component, Clone, Copy)]
+pub struct SouthTabs {
+
+}
+
+impl TabTrim for SouthTabs {
+
+}
+
+/// Western border area of the [`Territory`] that hosts the feature tabs.
+#[derive(Component, Clone, Copy)]
+pub struct WestTabs {
+
+}
+
+impl TabTrim for WestTabs {
+
+}
+
+/// Contains every [`Territory`] [`Entity`] neighbor that this one is linked to, separated by what side they're linked on.  
+///   
+/// Used for graph traversals when handling linked [`DragRequest`]s.
+#[derive(Component)]
+pub struct CardinalConnections {
+    pub northern: Vec<Entity>,
+    pub eastern: Vec<Entity>,
+    pub southern: Vec<Entity>,
+    pub western: Vec<Entity>,
+}
+
+impl Default for CardinalConnections {
+    fn default() -> Self {
+        CardinalConnections { northern: Vec::new(), eastern: Vec::new(), southern: Vec::new(), western: Vec::new() }
+    }
+}
+
+impl CardinalConnections {
+    /// Gets the northern connections in an [`Entity`] [`Vec`].
+    pub fn northern(&self) -> Vec<Entity> {
+        self.northern.clone()
+    }
+
+    /// Gets the eastern connections in an [`Entity`] [`Vec`].
+    pub fn eastern(&self) -> Vec<Entity> {
+        self.eastern.clone()
+
+    }
+    /// Gets the southern connections in an [`Entity`] [`Vec`].
+    pub fn southern(&self) -> Vec<Entity> {
+        self.southern.clone()
+    }
+
+    /// Gets the western connections in an [`Entity`] [`Vec`].
+    pub fn western(&self) -> Vec<Entity> {
+        self.western.clone()
+    }
+
+    /// Get a [`Vec`] of every [`Entity`] linked.
+    pub fn get_all_vec(&self) -> Vec<Entity> {
+        let mut total_vec = Vec::new();
+        total_vec.extend(&self.northern);
+        total_vec.extend(&self.eastern);
+        total_vec.extend(&self.southern);
+        total_vec.extend(&self.western);
+        total_vec
+    }
+
+    /// Get a [`Vec`] of connections the same side as the [`ResizeDirection`] passed in. 
+    ///   
+    /// Corner directions get a combined [`Vec`] of the adjacent sides.
+    pub fn get_resize_direction_vec(&self, resize_direction: ResizeDirection) -> Vec<Entity> {
+        let mut result_vec = Vec::new();
+        match resize_direction {
+            ResizeDirection::North => { result_vec.extend(&self.northern) },
+            ResizeDirection::NorthEast => { result_vec.extend(&self.northern); result_vec.extend( &self.eastern) },
+            ResizeDirection::East => { result_vec.extend(&self.eastern) },
+            ResizeDirection::SouthEast => { result_vec.extend(&self.southern); result_vec.extend(&self.eastern) },
+            ResizeDirection::South => { result_vec.extend(&self.southern) },
+            ResizeDirection::SouthWest => { result_vec.extend(&self.southern); result_vec.extend(&self.western) },
+            ResizeDirection::West => { result_vec.extend(&self.western) },
+            ResizeDirection::NorthWest => { result_vec.extend(&self.northern); result_vec.extend(&self.western) }
+        }
+        result_vec
+    }
+}
+
+/// Marker component for group of [`Territory`]s separated for drag querying.
+#[derive(Component)]
+pub struct DragTerritoryGroup;
+
+/// Marker component for group of [`Territory`]s separated for resize querying.
+#[derive(Component)]
+pub struct AdvancingTerritoryGroup;
+
+/// Marker component for group of [`Territory`]s separated for resize querying.
+#[derive(Component)]
+pub struct RetreatingTerritoryGroup;
 
 /// Identifies entity as a [`Territory`] UI element. A [`Territory`] can be moved and resized, 
 /// but cannot overlap with other [`Territory`]s.  
@@ -599,6 +745,70 @@ pub enum MoveRequestType {
     Resize(ResizeDirection)
 }
 
+/// Marks a [`TerritoryTabs`] UI element as having been commanded to move without changing size. Entities with this component will be processed 
+/// by motion systems and this component will be removed once all processing is complete.
+#[derive(Component, Clone)]
+pub struct DragRequest {
+    /// Collection of [`Rect`]s describing the [`DragRequest`]'s proposed location in the `Window`.
+    pub proposed_expanse: RectKit,
+    /// Drag vector in **screenspace** coordinates. Flip the y to get a worldspace delta.
+    pub drag_delta: Vec2
+}
+
+impl Default for DragRequest {
+    fn default() -> Self {
+        DragRequest { proposed_expanse: RectKit::default(), drag_delta: Vec2::ZERO }
+    }
+}
+
+impl DragRequest {
+    pub fn new (proposed_expanse: RectKit, drag_delta: Vec2) -> Self {
+        DragRequest { proposed_expanse, drag_delta }
+    }
+
+    /// Gets the [`RectKit`] containing the proposed [`Rect`]s UI element wants to move to.
+    pub fn proposed_expanse(&self) -> RectKit { self.proposed_expanse }
+
+    /// Gets the delta of the drag movement in **screenspace** coordinates.
+    pub fn drag_delta(&self) -> Vec2 { self.drag_delta }
+}
+
+/// Marks a [`TerritoryTabs`] UI element as having been commanded to change its boundaries. Entities with this component will be processed 
+/// by motion systems and this component will be removed once all processing is complete.
+#[derive(Component, Clone)]
+pub struct ResizeRequest {
+    /// Collection of [`Rect`]s describing the [`DragRequest`]'s proposed location in the `Window`.
+    pub proposed_expanse: RectKit,
+    /// What resize handle did the user manipulate to command this motion?
+    pub resize_direction: ResizeDirection
+}
+
+impl Default for ResizeRequest {
+    fn default() -> Self {
+        ResizeRequest { 
+            proposed_expanse: RectKit::default(), 
+            resize_direction: ResizeDirection::West
+        }
+    }
+}
+
+impl ResizeRequest {
+    pub fn new (proposed_expanse: RectKit, resize_direction: ResizeDirection) -> Self {
+        ResizeRequest { 
+            proposed_expanse,
+            resize_direction
+        }
+    }
+
+    /// Gets the [`RectKit`] containing the proposed [`Rect`]s UI element wants to move to.
+    pub fn proposed_expanse(&self) -> RectKit { self.proposed_expanse }
+}
+
+
+
+
+
+
 /// Marks a [`TerritoryTabs`] UI element as having been commanded to move. Entities with this component will be processed 
 /// by motion systems and this component will be removed once all processing is complete.
 #[derive(Component, Clone)]
@@ -654,13 +864,10 @@ impl MoveRequest {
     }
 }
 
-/// `Component`  
-/// \
-/// User has marked this UI element as `Locked`, and they don't want any systems moving it around!
-#[derive(Component)]
-pub struct Locked;
+/// Replacement for placeholders and overlays.
+pub struct Glance {
 
-
+}
 
 
 #[cfg(test)]

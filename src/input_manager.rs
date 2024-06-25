@@ -48,23 +48,6 @@ pub fn test_delete_all_territories_just_pressed (
     }
 }
 
-// Remove all Territories when this key is pressed.
-pub fn test_delete_all_territories (
-    mut commands: Commands,
-    mut remove_territories_key_pressed: EventReader<RemoveTerritoriesKeyPressed>,
-    window_query: Query<&Children, With<Window>>,
-    territory_query: Query<Entity, With<Territory>>
-) {
-    for _event in remove_territories_key_pressed.read() {
-        for window_children in & window_query {
-            let mut territories = territory_query.iter_many(window_children);
-            while let Some(territory_entity) =  territories.fetch_next(){
-                commands.entity(territory_entity).despawn_recursive();
-            }
-        }
-    }
-}
-
 // Send window spawn event for testing.
 pub fn test_spawn_window (
     dev_controls: Res<ActionState<DevControls>>,

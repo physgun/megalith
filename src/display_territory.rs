@@ -235,7 +235,8 @@ pub fn spawn_territory (
                 Name::new("[TERRITORY] Base"),
                 new_territory,
                 SpatialBundle::default(),
-                spawn_event.display_library
+                spawn_event.display_library,
+                CardinalConnections::default()
             )
         ).id();
 
