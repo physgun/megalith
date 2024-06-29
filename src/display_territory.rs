@@ -118,28 +118,28 @@ impl TerritoryNodes for Territory {
         let name;
         let (grid_row_location, grid_column_location) = resize_direction.get_css_grid_location();
         match resize_direction {
-            ResizeDirection::North => {
+            ResizeDirection::North{..} => {
                 name = format!("[NODE] Territory Resize Button Node - {:?}", resize_direction);
             },
-            ResizeDirection::NorthEast => {
+            ResizeDirection::NorthEast{..} => {
                 name = format!("[NODE] Territory Resize Button Node - {:?}", resize_direction);
             },
-            ResizeDirection::East => {
+            ResizeDirection::East{..} => {
                 name = format!("[NODE] Territory Resize Button Node - {:?}", resize_direction);
             },
-            ResizeDirection::SouthEast => {
+            ResizeDirection::SouthEast{..} => {
                 name = format!("[NODE] Territory Resize Button Node - {:?}", resize_direction);
             },
-            ResizeDirection::South => {
+            ResizeDirection::South{..} => {
                 name = format!("[NODE] Territory Resize Button Node - {:?}", resize_direction);
             },
-            ResizeDirection::SouthWest => {
+            ResizeDirection::SouthWest{..} => {
                 name = format!("[NODE] Territory Resize Button Node - {:?}", resize_direction);
             },
-            ResizeDirection::West => {
+            ResizeDirection::West{..} => {
                 name = format!("[NODE] Territory Resize Button Node - {:?}", resize_direction);
             },
-            ResizeDirection::NorthWest => {
+            ResizeDirection::NorthWest{..} => {
                 name = format!("[NODE] Territory Resize Button Node - {:?}", resize_direction);
             }
         };
@@ -215,7 +215,7 @@ pub fn spawn_territory (
                 commands.entity(border_node_entity).add_child(drag_node_entity);
 
                 commands.entity(base_node_entity).add_child(resize_node_entity);
-                for resize_direction in ResizeDirection::ALL {
+                for resize_direction in ResizeDirection::ORDINAL {
                     let new_resize_button = commands.spawn(new_territory.resize_button_template(resize_direction)).id();
                     commands.entity(resize_node_entity).add_child(new_resize_button);
                 }

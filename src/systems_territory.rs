@@ -332,7 +332,7 @@ pub fn territory_drag_request_eval (
     to_be_traversed_entities.push(territory_entity);
     debug!("[DFS] Added DragRequest Territory to stack.");
 
-    // Depth first traversal to collect all connected Territory entities.
+    // Find all connections and add them to the dragged territory group.
     while let Some(current_entity) =  to_be_traversed_entities.pop() {
         collected_entities.push(current_entity);
         debug!("[DFS] Popped Territory off of the stack and added to visited.");
@@ -358,14 +358,14 @@ pub fn territory_drag_request_eval (
 /// Initial examination of all [`ResizeRequest`]s attached to [`Territory`] entities.  
 ///   
 /// Basic sanity checks and a depth first traversal to find connected [`Territory`]s
-/// with similar and opposite resizing, to be marked with [`ResizeSimilarTerritoryGroup`] and [`ResizeOppositeTerritoryGroup`].
+/// with similar and opposite resizing, to be marked with [`AdvancingTerritoryGroup`] and [`RetreatingTerritoryGroup`].
 pub fn territory_resize_request_eval (
     mut commands: Commands,
-    resizing_territory_query: Query<(Entity, &Territory, Option<&Locked>, &ResizeRequest)>,
-    potential_neighbor_query: Query<&CardinalConnections, With<Territory>>
+    resizing_territory_query: Query<(Entity, &Territory, &CardinalConnections, Option<&Locked>, &ResizeRequest)>,
+    potential_neighbor_query: Query<(&CardinalConnections, &Territory), Without<ResizeRequest>>
 ) {
     let Ok(
-        (territory_entity, territory, territory_locked, resize_request)
+        (territory_entity, territory, initial_connections, territory_locked, resize_request)
         ) = resizing_territory_query.get_single() else {
         error!("Resize request systems activated but resize query did not have single entity!");
         return;
@@ -384,16 +384,43 @@ pub fn territory_resize_request_eval (
         return;
     }
 
-    // Depth first traversal like drag, but we only care about connections that share an advancing or retreating border.
-    let mut to_be_traversed_entities: Vec<Entity> = Vec::new();
+    // Depth first traversal like drag, but we only care about connections that share an opposing advancing or retreating border.
+    let mut to_be_traversed_entities: Vec<(ResizeDirection, ResizeMagnitude, Entity)> = Vec::new();
     let mut collected_entities: Vec<Entity> = Vec::new();
 
-    // Add the OG ResizeRequest Territory to the stack to start with.
-    to_be_traversed_entities.push(territory_entity);
+    // If our OG DragRequesting Territory is a corner or other multi-side resize with a retreating side,
+    // there is a possibility of collisions between the OG's connecting Territories.
+    // More efficient to handle this special case here and now rather than later.
+    // Thankfully, only the OG territory will do any multi-side resizing. Any downstream effects are all one-sided.
+    if resize_request.resize_direction().is_multi_side_resize() && resize_request.resize_direction().has_any_retreating() {
+
+        let mut neighbor_rects: Vec<Rect> = Vec::new();
+
+        for cardinal_direction in resize_request.resize_direction().get_cardinal_directions() {
+
+            let neighbor_entities = initial_connections.get_resize_direction_vec(cardinal_direction);
+            for (_, checked_territory) in potential_neighbor_query.iter_many(neighbor_entities) {
+                
+                let to_be_compared_rect = checked_territory.expanse().screenspace();
+                match cardinal_direction.get_opposite() {
+
+                }
+
+                neighbor_rects.push(to_be_compared_rect)
+            }
+        }
+    }
+
+
+
+    // Add the OG ResizeRequest Territory to the stack to start with. How do both if corner???????????????? add one of each
+    to_be_traversed_entities.push((resize_request.resize_direction(), resize_request.westward_magnitude(), territory_entity));
     debug!("[DFS] Added DragRequest Territory to stack.");
 
-    // 
-    while let Some(current_entity) =  to_be_traversed_entities.pop() {
+    // Find the connections who will be affected by the ResizeRequest.
+    // Mark them as part of an advancing or retreating group of territories.
+    // Special Edge Case: Retreating corner resize with connections on both adjacent sides.
+    while let Some((resize_direction, resize_trend, current_entity)) =  to_be_traversed_entities.pop() {
         collected_entities.push(current_entity);
         debug!("[DFS] Popped Territory off of the stack and added to visited.");
 

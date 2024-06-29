@@ -184,8 +184,7 @@ pub fn territory_resize_move_request_sickle (
                 }
 
                 // Mod a new screenspace rect, depending on ResizeDirection. Everything is screenspace!
-                let mut new_rect = territory.expanse().screenspace();
-                new_rect = resize_direction.add_delta_to_rect(new_rect, drag_delta);
+                let new_rect = resize_direction.add_delta_to_rect(territory.expanse().screenspace(), drag_delta);
 
                 let new_move_request = MoveRequest {
                     proposed_expanse: RectKit::from_screenspace(
