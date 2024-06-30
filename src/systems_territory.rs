@@ -362,7 +362,7 @@ pub fn territory_drag_request_eval (
 pub fn territory_resize_request_eval (
     mut commands: Commands,
     resizing_territory_query: Query<(Entity, &Territory, &CardinalConnections, Option<&Locked>, &ResizeRequest)>,
-    potential_neighbor_query: Query<(&CardinalConnections, &Territory), Without<ResizeRequest>>
+    potential_neighbor_query: Query<(&CardinalConnections, &Territory, Option<&Locked>), Without<ResizeRequest>>
 ) {
     let Ok(
         (territory_entity, territory, initial_connections, territory_locked, resize_request)
@@ -384,61 +384,118 @@ pub fn territory_resize_request_eval (
         return;
     }
 
-    // Depth first traversal like drag, but we only care about connections that share an opposing advancing or retreating border.
-    let mut to_be_traversed_entities: Vec<(ResizeDirection, ResizeMagnitude, Entity)> = Vec::new();
-    let mut collected_entities: Vec<Entity> = Vec::new();
-
     // If our OG DragRequesting Territory is a corner or other multi-side resize with a retreating side,
     // there is a possibility of collisions between the OG's connecting Territories.
     // More efficient to handle this special case here and now rather than later.
     // Thankfully, only the OG territory will do any multi-side resizing. Any downstream effects are all one-sided.
     if resize_request.resize_direction().is_multi_side_resize() && resize_request.resize_direction().has_any_retreating() {
 
+        // Collection of screenspace neighbor rects modified by the impending resize, to be checked for collisions.
         let mut neighbor_rects: Vec<Rect> = Vec::new();
 
+        // For each basic direction our special multi-side resize affects:
         for cardinal_direction in resize_request.resize_direction().get_cardinal_directions() {
 
+            // Get all entities connected to that specific basic direction.
             let neighbor_entities = initial_connections.get_resize_direction_vec(cardinal_direction);
-            for (_, checked_territory) in potential_neighbor_query.iter_many(neighbor_entities) {
-                
-                let to_be_compared_rect = checked_territory.expanse().screenspace();
-                match cardinal_direction.get_opposite() {
 
-                }
+            // For each of these entity's territories:
+            for (_, checked_territory, _) in potential_neighbor_query.iter_many(neighbor_entities) {
 
-                neighbor_rects.push(to_be_compared_rect)
+                // Push the modifed rect, noting that the connecting rect will have opposite border movement.
+                neighbor_rects.push(cardinal_direction.get_opposite().apply_to_rect(checked_territory.expanse().screenspace()));
+
             }
         }
+
+        // Check unique pairs of the modifed rects for collisions.
+        // There are many options for what to do if a collision occurs.
+        // The least annoying option for the user is to cancel the ResizeRequest.
+        for (index, rect1) in neighbor_rects.iter().enumerate() {
+            for rect2 in &neighbor_rects[index + 1..] {
+                if rect1.intersect(*rect2).is_empty() { 
+                    continue; 
+                }
+                else { 
+                    commands.entity(territory_entity).remove::<ResizeRequest>(); 
+                    return;
+                }
+            }
+        }
+
     }
 
+    // For easier interaction with Locked territories, 
+    // it's best to have an individual DFS per cardinal direction for multi-side resizing.
+    for cardinal_direction in resize_request.resize_direction().get_cardinal_directions() {
 
+        // Depth first traversal like drag, but we only care about connections that share an opposing advancing or retreating border.
+        let mut to_be_traversed_entities: Vec<(ResizeDirection, Entity)> = Vec::new();
+        let mut collected_entities: Vec<(ResizeDirection, Entity)> = Vec::new();
 
-    // Add the OG ResizeRequest Territory to the stack to start with. How do both if corner???????????????? add one of each
-    to_be_traversed_entities.push((resize_request.resize_direction(), resize_request.westward_magnitude(), territory_entity));
-    debug!("[DFS] Added DragRequest Territory to stack.");
+        // Push OG territory's cardinal side to stack
+        to_be_traversed_entities.push((cardinal_direction, territory_entity));
+        debug!("[DFS] Added OG ResizeRequest Territory side {:?} to stack.", cardinal_direction);
 
-    // Find the connections who will be affected by the ResizeRequest.
-    // Mark them as part of an advancing or retreating group of territories.
-    // Special Edge Case: Retreating corner resize with connections on both adjacent sides.
-    while let Some((resize_direction, resize_trend, current_entity)) =  to_be_traversed_entities.pop() {
-        collected_entities.push(current_entity);
-        debug!("[DFS] Popped Territory off of the stack and added to visited.");
+        // Find the connections who will be affected by the ResizeRequest.
+        // Mark them as part of an advancing or retreating group of territories.
+        while let Some((resize_direction, current_entity)) =  to_be_traversed_entities.pop() {
+            // We've visited this territory's side, so add to list of ones we've already seen.
+            collected_entities.push((resize_direction, current_entity));
+            debug!("[DFS] Popped Territory with side {:?} off stack and added to visited.", resize_direction);
 
-        commands.entity(current_entity).insert(DragTerritoryGroup);
+            // Get the connections of the just-popped territory, and see if its locked too. 
+            let Ok((current_connections, _, locked
+            )) = potential_neighbor_query.get(current_entity) else {
+                // Failure here would mean a more broad-scoped component error.
+                error!("[DFS] CardinalConnections component get error!");
+                continue;
+            };
 
-        let Ok(current_connections) = potential_neighbor_query.get(current_entity) else {
-            error!("[DFS] CardinalConnections component get error!");
-            continue;
-        };
-
-        for next_entity in current_connections.get_all_vec() {
-            if collected_entities.contains(&next_entity) { 
-                debug!("[DFS] Popped Territory neighbor already visited.");
-                continue; 
+            // A locked territory means this entire side's resize chain is invalid. 
+            // But, any other cardinal directions could still be valid, so we can't remove the ResizeRequest entirely.
+            // Instead, remove all group components from the collection of visited entities and bail.
+            if locked.is_some() {
+                for (visited_direction, visited_entity) in collected_entities {
+                    match visited_direction.get_single_magnitude() {
+                        ResizeMagnitude::None => { 
+                            warn!("{:?} somehow in collection of DFS visited entities??", ResizeMagnitude::None);
+                        }
+                        ResizeMagnitude::Advancing(_) => {
+                            commands.entity(visited_entity).remove::<AdvancingTerritoryGroup>();
+                        }
+                        ResizeMagnitude::Retreating(_) => {
+                            commands.entity(visited_entity).remove::<RetreatingTerritoryGroup>();
+                        }
+                    }
+                }
+                break;
             }
-            to_be_traversed_entities.push(next_entity);
-            debug!("[DFS] Popped Territory neighbor pushed to stack.");
-        }
+
+            // Add to group depending on resize magnitude.
+            match resize_direction.get_single_magnitude() {
+                ResizeMagnitude::None => { warn!("Popped resize territory had {:?}!", ResizeMagnitude::None) }
+                ResizeMagnitude::Advancing(_) => { 
+                    commands.entity(current_entity).insert(AdvancingTerritoryGroup(resize_direction)); 
+                }
+                ResizeMagnitude::Retreating(_) => {
+                    commands.entity(current_entity).insert(RetreatingTerritoryGroup(resize_direction));
+                }
+            }
+
+            // Add relevant connections to the stack to be popped later. We'll need the opposite ResizeDirection:
+            let opposite_direction = resize_direction.get_opposite();
+            for next_entity in current_connections.get_resize_direction_vec(resize_direction) {
+                if collected_entities.contains(&(opposite_direction, next_entity)) { 
+                    debug!("[DFS] Popped Territory neighbor already visited.");
+                    continue; 
+                }
+
+                // Push unvisited, relevant connection to stack.
+                to_be_traversed_entities.push((opposite_direction, next_entity));
+                debug!("[DFS] Popped Territory neighbor with side {:?} pushed to stack.", opposite_direction);
+            }
+        } 
     }
 
 }
@@ -449,7 +506,7 @@ pub fn territory_resize_request_eval (
 pub fn territory_drag_request_window_edge (
     window_query: Query<(&Window, &Children), With<TerritoryTabs>>,
     dragging_territories_query: Query<(&DragRequest, &Territory)>,
-    linked_territories_query: Query<(&Territory, &CardinalConnections), Without<DragRequest>>
+    connected_territories_query: Query<(&Territory, &CardinalConnections), Without<DragRequest>>
 ) {
     for (window, window_children) in & window_query {
 

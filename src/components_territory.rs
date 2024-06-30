@@ -448,7 +448,7 @@ pub enum DisplayLibrary {
 /// is to implement extension traits for translating to each library, but only in the modules that interact 
 /// with that library. Hopefully this will maintain both a decoupled architecture with the 
 /// display libraries and to keep Territory Tabs flexible with regard to what libraries it can use.
-#[derive(Component, Clone, Debug)]
+#[derive(Component, Clone, Copy, Debug, PartialEq)]
 pub enum ResizeDirection {
     North { northward_magnitude: ResizeMagnitude },
     NorthEast { northward_magnitude: ResizeMagnitude, eastward_magnitude: ResizeMagnitude },
@@ -476,6 +476,20 @@ impl ResizeDirection {
         Self::West { westward_magnitude: ResizeMagnitude::None },
         Self::NorthWest { northward_magnitude: ResizeMagnitude::None, westward_magnitude: ResizeMagnitude::None }
     ];
+
+    /// Gets the [`ResizeMagnitude`] if a single-sided cardinal direction.  
+    ///   
+    /// Cardinal directions are North, East, South, West. All else return [`ResizeMagnitude::None`].
+    pub fn get_single_magnitude (&self) -> ResizeMagnitude {
+        match self {
+            ResizeDirection::North { northward_magnitude } => { *northward_magnitude },
+            ResizeDirection::East { eastward_magnitude } => { *eastward_magnitude },
+            ResizeDirection::South { southward_magnitude } => { *southward_magnitude },
+            ResizeDirection::West { westward_magnitude } => { *westward_magnitude },
+            ResizeDirection::NorthEast {..} | ResizeDirection::SouthEast {..} | ResizeDirection::SouthWest {..} | ResizeDirection::NorthWest {..}
+            => { ResizeMagnitude::None }
+        }
+    }
 
     /// Gets the opposite resize direction and magnitude.
     pub fn get_opposite(&self) -> Self {
@@ -519,7 +533,7 @@ impl ResizeDirection {
         }
     }
 
-    /// Returns a [`Vec`] of the ordinal [`ResizeDirection`] broken down into its composite cardinal points.  
+    /// Returns a [`Vec`] of the [`ResizeDirection`] broken down into its composite cardinal points.  
     ///   
     /// [`ResizeDirection::SouthWest`] will give `vec!(ResizeDirection::South, ResizeDirection::West)`. All magnitudes transfer.
     pub fn get_cardinal_directions(&self) -> Vec<ResizeDirection> {
@@ -872,7 +886,7 @@ impl ResizeDirection {
 }
 
 /// What is the trend of the [`ResizeDirection`]? Is it growing or shrinking the [`Rect`]?
-#[derive(Component, Clone, Copy, Debug, Default)]
+#[derive(Component, Clone, Copy, Debug, Default, PartialEq)]
 pub enum ResizeMagnitude {
     #[default]
     None,
@@ -1058,11 +1072,23 @@ pub struct DragTerritoryGroup;
 
 /// Marker component for group of [`Territory`]s separated for resize querying.
 #[derive(Component)]
-pub struct AdvancingTerritoryGroup;
+pub struct AdvancingTerritoryGroup(pub ResizeDirection);
+impl AdvancingTerritoryGroup {
+    /// Get a clone of the wrapped [`ResizeDirection`].
+    pub fn resize_direction(&self) -> ResizeDirection {
+        self.0.clone()
+    }
+}
 
 /// Marker component for group of [`Territory`]s separated for resize querying.
 #[derive(Component)]
-pub struct RetreatingTerritoryGroup;
+pub struct RetreatingTerritoryGroup(pub ResizeDirection);
+impl RetreatingTerritoryGroup {
+    /// Get a clone of the wrapped [`ResizeDirection`].
+    pub fn resize_direction(&self) -> ResizeDirection {
+        self.0.clone()
+    }
+}
 
 
 
