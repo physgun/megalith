@@ -22,7 +22,7 @@ pub enum TerritoryTabsState {
 }
 
 /// Remove all entities with a specified component.
-pub fn cleanup_all_entities_with<T: Component> (
+pub fn despawn_all_entities_with<T: Component> (
     mut commands: Commands,
     cleanup_query: Query<Entity, With<T>>
 ) {
@@ -30,7 +30,7 @@ pub fn cleanup_all_entities_with<T: Component> (
 }
 
 /// Remove all existing components of type T.
-pub fn cleanup_all_components_of_type<T: Component> (
+pub fn remove_all_components_of_type<T: Component> (
     mut commands: Commands,
     cleanup_query: Query<Entity, With<T>>
 ) {

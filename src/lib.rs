@@ -80,8 +80,8 @@ pub mod ui {
                     setup_tab_move_placeholders)
                 .add_systems(OnExit(TerritoryTabsState::MovingTabs), (
                     activate_placeholders
-                        .before(cleanup_all_entities_with::<CleanupOnMovingTabExit>),
-                    cleanup_all_entities_with::<CleanupOnMovingTabExit>
+                        .before(despawn_all_entities_with::<CleanupOnMovingTabExit>),
+                    despawn_all_entities_with::<CleanupOnMovingTabExit>
                 ))
 
                 // System Sets: Update

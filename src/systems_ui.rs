@@ -32,7 +32,7 @@ pub fn display_debug_gizmos (
             territory.expanse.worldspace().center(), 
             0.0,
             territory.expanse.worldspace().size(),
-            Color::BLUE
+            bevy::color::palettes::css::BLUE
         );
     }
 }

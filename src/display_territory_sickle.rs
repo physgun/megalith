@@ -2,7 +2,7 @@
 //! In addition, some of the code design in this file is loosely copied from sickle_ui.
 
 use bevy::{prelude::*, ui::RelativeCursorPosition};
-use sickle_ui::{animated_interaction::AnimatedInteraction, drag_interaction::Draggable, interactions::InteractiveBackground, TrackedInteraction};
+use sickle_ui::{animated_interaction::AnimatedInteraction, drag_interaction::Draggable, interactions::InteractiveBackground, flux_interaction::TrackedInteraction};
 
 use crate::components_territory::*;
 
@@ -55,8 +55,8 @@ pub fn spawn_territory_sickle (
                     Draggable::default(),
                     RelativeCursorPosition::default(),
                     InteractiveBackground {
-                        highlight: Color::rgb_u8(115, 235, 235).into(),
-                        pressed: Color::rgb_u8(50, 245, 245).into(),
+                        highlight: Color::srgb_u8(115, 235, 235).into(),
+                        pressed: Color::srgb_u8(50, 245, 245).into(),
                         cancel: Color::NONE.into()
                     },
                     AnimatedInteraction::<InteractiveBackground>::default()

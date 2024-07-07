@@ -27,11 +27,15 @@ Designing a UI framework for CAD & Tooling applications, **Territory Tabs**. The
 
 ## Roadmap ##
 **Core Territory Behavior**
- - [] Redesign Move and Resize to be decoupled from display lbraries.
- - [] Implement Locked Territories
+ - [ ] Redesign Drag and Resize for connections.
+ - [ ] Implement Locked Territories.
+ - [ ] Implement Align Mode.
+ - [ ] Implement Connect Mode.
+ - [ ] Implement Quad Bars, sizes, hiding.
+ - [ ] Implement Tab Signets & Drag Creation
  
- ** Features **
- - []
+ ** ToolSets & RuleSets **
+ - [ ] Finalize static strategy for ToolSets
 
 ## License
 

@@ -32,7 +32,7 @@ impl TerritoryNodes for Territory {
                     overflow: Overflow::clip(),
                     ..default()
                 },
-                background_color: BackgroundColor(Color::rgb_u8(60, 91, 111)),
+                background_color: BackgroundColor(Color::srgb_u8(60, 91, 111)),
                 focus_policy: bevy::ui::FocusPolicy::Block,
                 ..default()
             },
@@ -54,7 +54,7 @@ impl TerritoryNodes for Territory {
                     border: UiRect::all(Val::Px(1.0)),
                     ..default()
                 },
-                border_color: BorderColor(Color::rgb_u8(93, 235, 215)),
+                border_color: BorderColor(Color::srgb_u8(93, 235, 215)),
                 ..default()
             }
         )

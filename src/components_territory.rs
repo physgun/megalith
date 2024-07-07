@@ -2,8 +2,8 @@
 
 use bevy::prelude::*;
 
-/// Smallest size of an icon.
-const ICON_SIZE: Vec2 = Vec2 { x: 20.0, y: 20.0 };
+/// Smallest size of a signet.
+pub const SIGNET_SIZE: Vec2 = Vec2 { x: 20.0, y: 20.0 };
 
 /// Settings governing the basic size behavior of all entities with [`Territory`] components. 
 #[derive(Resource)]
@@ -20,7 +20,7 @@ pub struct GlobalTerritorySettings {
 impl Default for GlobalTerritorySettings{
     fn default() -> Self {
         GlobalTerritorySettings {
-            min_size: ICON_SIZE,
+            min_size: SIGNET_SIZE,
             default_size: Vec2 { x: 600.0, y: 200.0 },
             inner_margins: Vec2 { x: 3.0, y: 3.0 },
             outer_margins: Vec2 { x: 2.5, y: 2.5 }
@@ -477,7 +477,8 @@ impl ResizeDirection {
         Self::NorthWest { northward_magnitude: ResizeMagnitude::None, westward_magnitude: ResizeMagnitude::None }
     ];
 
-    /// Gets the [`ResizeMagnitude`] if a single-sided cardinal direction.  
+    /// Gets the [`ResizeMagnitude`] wrapped within a single-sided cardinal direction.
+    /// For multisided, call [`ResizeDirection::get_cardinal_directions`] first and iterate.
     ///   
     /// Cardinal directions are North, East, South, West. All else return [`ResizeMagnitude::None`].
     pub fn get_single_magnitude (&self) -> ResizeMagnitude {
@@ -899,12 +900,29 @@ impl ResizeMagnitude {
     /// without having to use clunky `var.0` syntax.  
     ///   
     /// Gives `0.0` if [`ResizeMagnitude::None`].
-    pub fn extent(&self) -> f32 {
+    pub fn get(&self) -> f32 {
         match self {
             ResizeMagnitude::None => { 0.0 },
-            ResizeMagnitude::Advancing(x) => { x.clone() },
-            ResizeMagnitude::Retreating(x) => { x.clone() }
+            ResizeMagnitude::Advancing(x) | ResizeMagnitude::Retreating(x) => { x.clone() }
         }
+    }
+
+    /// Set magnitude value.
+    pub fn set(&mut self, magnitude: f32) -> &mut Self {
+        match self {
+            ResizeMagnitude::None => { },
+            ResizeMagnitude::Advancing(x) | ResizeMagnitude::Retreating(x) => { *x = magnitude; },
+        }
+        self
+    }
+
+    /// Add to current magnitude value.
+    pub fn add(&mut self, added_magnitude: f32) -> &mut Self {
+        match self {
+            ResizeMagnitude::None => { },
+            ResizeMagnitude::Advancing(x) | ResizeMagnitude::Retreating(x) => { *x += added_magnitude; },
+        }
+        self
     }
 
     /// Easier-to-read check if [`ResizeMagnitude::None`].
@@ -922,9 +940,23 @@ impl ResizeMagnitude {
         matches!(self, ResizeMagnitude::Retreating(_))
     }
 
+    /// Check if the magnitude is negative.  
+    ///   
+    /// Typically, this means the [`ResizeRequest`] should be canceled.
+    pub fn is_negative(&self) -> bool {
+        match self {
+            ResizeMagnitude::None => { false },
+            ResizeMagnitude::Advancing(x) if *x < 0.0 => { true },
+            ResizeMagnitude::Retreating(x) if *x < 0.0 => { true },
+            _ => { false }
+        }
+    }
+
     /// If [`ResizeMagnitude::Advancing`], get [`ResizeMagnitude::Retreating`].  
     /// If [`ResizeMagnitude::Retreating`], get [`ResizeMagnitude::Advancing`].  
-    /// If [`ResizeMagnitude::None`], get [`ResizeMagnitude::None`].
+    /// If [`ResizeMagnitude::None`], get [`ResizeMagnitude::None`].  
+    ///   
+    /// All magnitudes transfer.
     pub fn get_opposite(&self) -> ResizeMagnitude {
         match self {
             ResizeMagnitude::None => { ResizeMagnitude::None },
@@ -1027,6 +1059,15 @@ impl DragRequest {
 
     /// Gets the delta of the drag movement in **screenspace** coordinates.
     pub fn drag_delta(&self) -> Vec2 { self.drag_delta }
+
+    /// Set new drag delta in **screenspace** coordinates.
+    pub fn set_drag_delta(&mut self, delta: Vec2) -> &mut Self { self.drag_delta = delta; self }
+
+    /// Add given x to drag delta x.
+    pub fn add_to_drag_delta_x(&mut self, x: f32) -> &mut Self { self.drag_delta.x += x; self }
+
+    /// Add given y to drag delta y.
+    pub fn add_to_drag_delta_y(&mut self, y: f32) -> &mut Self { self.drag_delta.y += y; self } 
 }
 
 /// Marks a [`TerritoryTabs`] UI element as having been commanded to change its boundaries. Entities with this component will be processed 
