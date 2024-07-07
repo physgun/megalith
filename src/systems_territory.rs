@@ -11,6 +11,7 @@ use crate::components_territory::*;
 use crate::display_territory::*;
 use crate::display_territory_sickle::*;
 use crate::input_manager::*;
+use crate::systems_common::remove_all_components_of_type;
 
 
 pub struct TerritoryPlugin;
@@ -65,7 +66,24 @@ impl Plugin for TerritoryPlugin {
                     )
                         .chain()
                         .in_set(TerritoryUpdateMotion)
-                        .run_if(any_with_component::<MoveRequest>)
+                        .run_if(any_with_component::<MoveRequest>),
+                    /*(
+
+                    ),
+                    (
+
+                    ),*/
+                    (
+                        remove_all_components_of_type::<DragTerritoryGroup>
+                            .run_if(any_component_removed::<DragRequest>()),
+                        remove_all_components_of_type::<AdvancingTerritoryGroup>
+                            .run_if(any_component_removed::<ResizeRequest>()),
+                        remove_all_components_of_type::<RetreatingTerritoryGroup>
+                            .run_if(any_component_removed::<ResizeRequest>())
+                    )
+                        .chain()
+                        .in_set(TerritoryUpdateMotionCleanup)
+                        
 
                 )
                     .in_set(TerritoryUpdate)
@@ -78,6 +96,7 @@ impl Plugin for TerritoryPlugin {
         );
     }
 }
+
 
 /// All display logic.
 #[derive(SystemSet, Clone, Eq, Debug, Hash, PartialEq)]
@@ -102,6 +121,18 @@ pub struct TerritoryUpdateState;
 /// Contains systems that act on a [`MoveRequest`].
 #[derive(SystemSet, Clone, Eq, Debug, Hash, PartialEq)]
 pub struct TerritoryUpdateMotion;
+
+/// Contains systems that act on a [`DragRequest`].
+#[derive(SystemSet, Clone, Eq, Debug, Hash, PartialEq)]
+pub struct TerritoryUpdateDragMotion;
+
+/// Contains systems that act on a [`ResizeRequest`].
+#[derive(SystemSet, Clone, Eq, Debug, Hash, PartialEq)]
+pub struct TerritoryUpdateResizeMotion;
+
+/// Contains systems that clean up after motion systems are complete.
+#[derive(SystemSet, Clone, Eq, Debug, Hash, PartialEq)]
+pub struct TerritoryUpdateMotionCleanup;
 
 /// Sent when a UI element is issued a [`MoveRequest`] component.
 #[derive(Event)]
@@ -143,10 +174,11 @@ pub fn display_debug_gizmos (
             territory.expanse.worldspace().center(), 
             0.0,
             territory.expanse.worldspace().size(),
-            Color::BLUE,
+            bevy::color::palettes::css::BLUE,
         );
     }
 }
+
 
 /// TODO: Refactor this out!
 #[derive(Component)]
@@ -185,7 +217,7 @@ pub fn configure_os_window(
                         height: Val::Percent(100.0),
                         ..default()
                     },
-                    background_color: BackgroundColor(Color::rgb_u8(21, 52, 72)),
+                    background_color: BackgroundColor(Color::srgb_u8(21, 52, 72)),
                     ..default()
                 },
                 TargetCamera(child_camera),
@@ -271,6 +303,425 @@ pub fn test_delete_all_territories (
         }
     }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/// Initial examination of all [`DragRequest`]s attached to [`Territory`] entities.  
+///   
+/// Other than the basic checks, the big operation here is to determine what [Territory]s
+/// are connected to this one directly or indirectly down the graph and add a [`DragTerritoryGroup`]
+/// marker component to them for ease of later processing. This is so collision logic
+/// can be run on all connected [`Territory`]s and they all appear to move as one connected whole.
+pub fn territory_drag_request_eval (
+    mut commands: Commands,
+    dragging_territory_query: Query<(Entity, &Territory, Option<&Locked>, &DragRequest)>,
+    potential_neighbor_query: Query<&CardinalConnections, With<Territory>>
+) {
+    let Ok(
+        (territory_entity, territory, territory_locked, drag_request)
+        ) = dragging_territory_query.get_single() else {
+        error!("Drag request systems activated but drag query did not have single entity!");
+        return;
+    };
+
+    // Locked Territories don't move anywhere.
+    if territory_locked.is_some() {
+        debug!("Removed a DragRequest from a locked Territory!");
+        commands.entity(territory_entity).remove::<DragRequest>();
+        return;
+    }
+
+    // Catch any zero-movement requests.
+    if drag_request.proposed_expanse().worldspace() == territory.expanse().worldspace() {
+        debug!("Removed a zero-movement DragRequest from a Territory!");
+        commands.entity(territory_entity).remove::<DragRequest>();
+        return;
+    }
+    
+    // Depth first traversal to collect all territory entities connected to the one with the DragRequest.
+    let mut to_be_traversed_entities: Vec<Entity> = Vec::new();
+    let mut collected_entities: Vec<Entity> = Vec::new();
+
+    // Add the OG DragRequest Territory to the stack.
+    to_be_traversed_entities.push(territory_entity);
+    debug!("[DFS] Added DragRequest Territory to stack.");
+
+    // Find all connections and add them to the dragged territory group.
+    while let Some(current_entity) =  to_be_traversed_entities.pop() {
+        collected_entities.push(current_entity);
+        debug!("[DFS] Popped Territory off of the stack and added to visited.");
+
+        commands.entity(current_entity).insert(DragTerritoryGroup);
+
+        let Ok(current_connections) = potential_neighbor_query.get(current_entity) else {
+            error!("[DFS] CardinalConnections component get error!");
+            continue;
+        };
+
+        for next_entity in current_connections.get_all_vec() {
+            if collected_entities.contains(&next_entity) { 
+                debug!("[DFS] Popped Territory neighbor already visited.");
+                continue; 
+            }
+            to_be_traversed_entities.push(next_entity);
+            debug!("[DFS] Popped Territory neighbor pushed to stack.");
+        }
+    }
+}
+
+/// Initial examination of all [`ResizeRequest`]s attached to [`Territory`] entities.  
+///   
+/// Basic sanity checks and a depth first traversal to find connected [`Territory`]s
+/// with similar and opposite resizing, to be marked with [`AdvancingTerritoryGroup`] and [`RetreatingTerritoryGroup`].
+pub fn territory_resize_request_eval (
+    mut commands: Commands,
+    resizing_territory_query: Query<(Entity, &Territory, &CardinalConnections, Option<&Locked>, &ResizeRequest)>,
+    potential_neighbor_query: Query<(&CardinalConnections, &Territory, Option<&Locked>), Without<ResizeRequest>>
+) {
+    let Ok(
+        (territory_entity, territory, initial_connections, territory_locked, resize_request)
+        ) = resizing_territory_query.get_single() else {
+        error!("Resize request systems activated but resize query did not have single entity!");
+        return;
+    };
+
+    // Locked Territories don't change size.
+    if territory_locked.is_some() {
+        debug!("Removed a ResizeRequest from a locked Territory!");
+        commands.entity(territory_entity).remove::<ResizeRequest>();
+        return;
+    }
+
+    // Catch any zero-movement requests. These are common on ResizeRequests when the user drags parallel to the resize bar.
+    if resize_request.proposed_expanse().worldspace() == territory.expanse().worldspace() {
+        commands.entity(territory_entity).remove::<ResizeRequest>();
+        return;
+    }
+
+    // If our OG DragRequesting Territory is a corner or other multi-side resize with a retreating side,
+    // there is a possibility of collisions between the OG's connecting Territories.
+    // More efficient to handle this special case here and now rather than later.
+    // Thankfully, only the OG territory will do any multi-side resizing. Any downstream effects are all one-sided.
+    if resize_request.resize_direction().is_multi_side_resize() && resize_request.resize_direction().has_any_retreating() {
+
+        // Collection of screenspace neighbor rects modified by the impending resize, to be checked for collisions.
+        let mut neighbor_rects: Vec<Rect> = Vec::new();
+
+        // For each basic direction our special multi-side resize affects:
+        for cardinal_direction in resize_request.resize_direction().get_cardinal_directions() {
+
+            // Get all entities connected to that specific basic direction.
+            let neighbor_entities = initial_connections.get_resize_direction_vec(cardinal_direction);
+
+            // For each of these entity's territories:
+            for (_, checked_territory, _) in potential_neighbor_query.iter_many(neighbor_entities) {
+
+                // Push the modifed rect, noting that the connecting rect will have opposite border movement.
+                neighbor_rects.push(cardinal_direction.get_opposite().apply_to_rect(checked_territory.expanse().screenspace()));
+
+            }
+        }
+
+        // Check unique pairs of the modifed rects for collisions.
+        // There are many options for what to do if a collision occurs.
+        // The least annoying option for the user is to cancel the ResizeRequest.
+        for (index, rect1) in neighbor_rects.iter().enumerate() {
+            for rect2 in &neighbor_rects[index + 1..] {
+                if rect1.intersect(*rect2).is_empty() { 
+                    continue; 
+                }
+                else { 
+                    commands.entity(territory_entity).remove::<ResizeRequest>(); 
+                    return;
+                }
+            }
+        }
+
+    }
+
+    // For easier interaction with Locked territories, 
+    // it's best to have an individual DFS per cardinal direction for multi-side resizing.
+    for cardinal_direction in resize_request.resize_direction().get_cardinal_directions() {
+
+        // Depth first traversal like drag, but we only care about connections that share an opposing advancing or retreating border.
+        let mut to_be_traversed_entities: Vec<(ResizeDirection, Entity)> = Vec::new();
+        let mut collected_entities: Vec<(ResizeDirection, Entity)> = Vec::new();
+
+        // Push OG territory's cardinal side to stack
+        to_be_traversed_entities.push((cardinal_direction, territory_entity));
+        debug!("[DFS] Added OG ResizeRequest Territory side {:?} to stack.", cardinal_direction);
+
+        // Find the connections who will be affected by the ResizeRequest.
+        // Mark them as part of an advancing or retreating group of territories.
+        while let Some((resize_direction, current_entity)) =  to_be_traversed_entities.pop() {
+            // We've visited this territory's side, so add to list of ones we've already seen.
+            collected_entities.push((resize_direction, current_entity));
+            debug!("[DFS] Popped Territory with side {:?} off stack and added to visited.", resize_direction);
+
+            // Get the connections of the just-popped territory, and see if they're locked too. 
+            let Ok((current_connections, _, locked
+            )) = potential_neighbor_query.get(current_entity) else {
+                // Failure here would mean a more broad-scoped component error.
+                error!("[DFS] CardinalConnections component get error!");
+                continue;
+            };
+
+            // A locked territory means this entire side's resize chain is invalid. 
+            // But, any other cardinal directions could still be valid, so we can't remove the ResizeRequest entirely.
+            // Instead, remove all group components from the collection of visited entities and bail.
+            if locked.is_some() {
+                for (visited_direction, visited_entity) in collected_entities {
+                    match visited_direction.get_single_magnitude() {
+                        ResizeMagnitude::None => { 
+                            warn!("{:?} somehow in collection of DFS visited entities??", ResizeMagnitude::None);
+                        }
+                        ResizeMagnitude::Advancing(_) => {
+                            commands.entity(visited_entity).remove::<AdvancingTerritoryGroup>();
+                        }
+                        ResizeMagnitude::Retreating(_) => {
+                            commands.entity(visited_entity).remove::<RetreatingTerritoryGroup>();
+                        }
+                    }
+                }
+                break;
+            }
+
+            // Add to group depending on resize magnitude.
+            match resize_direction.get_single_magnitude() {
+                ResizeMagnitude::None => { warn!("Popped resize territory had {:?}!", ResizeMagnitude::None) }
+                ResizeMagnitude::Advancing(_) => { 
+                    commands.entity(current_entity).insert(AdvancingTerritoryGroup(resize_direction)); 
+                }
+                ResizeMagnitude::Retreating(_) => {
+                    commands.entity(current_entity).insert(RetreatingTerritoryGroup(resize_direction));
+                }
+            }
+
+            // Add relevant connections to the stack to be popped later. We'll need the opposite ResizeDirection:
+            let opposite_direction = resize_direction.get_opposite();
+            for next_entity in current_connections.get_resize_direction_vec(resize_direction) {
+                if collected_entities.contains(&(opposite_direction, next_entity)) { 
+                    debug!("[DFS] Popped Territory neighbor already visited.");
+                    continue; 
+                }
+
+                // Push unvisited, relevant connection to stack.
+                to_be_traversed_entities.push((opposite_direction, next_entity));
+                debug!("[DFS] Popped Territory neighbor with side {:?} pushed to stack.", opposite_direction);
+            }
+        } 
+    }
+
+}
+
+/// Modify [`DragRequest`]s that try to move any [`Territory`] tagged with [`DragTerritoryGroup`] beyond the window edge.
+///   
+/// This is better handled in **screenspace**.
+pub fn territory_drag_request_window_edge (
+    window_query: Query<&Window, With<TerritoryTabs>>,
+    mut drag_request_territory_query: Query<(&mut DragRequest, &Parent)>,
+    connected_territories_query: Query<&Territory, (With<DragTerritoryGroup>, Without<DragRequest>)>
+) {
+    let Ok(
+        (mut drag_request, drag_parent_window)
+    ) = drag_request_territory_query.get_single_mut() else {
+        error!("Failed to find DragRequest entity with Window Parent!");  
+        return;
+    };
+
+    let Ok(window) = window_query.get(drag_parent_window.get()) else {
+        error!("Failed to find Window parent!");  
+        return;
+    };
+    let window_rect = Rect::from_corners(Vec2::ZERO, Vec2::new(window.width(), window.height()));
+
+    // Collection of screenspace rects to be checked. Optimize later.
+    let mut checked_screenspace_rects: Vec<Rect> = Vec::new();
+    checked_screenspace_rects.push(drag_request.proposed_expanse().screenspace());
+
+    for connected_territory in & connected_territories_query {
+        let checked_rect = Rect::from_center_size(
+            connected_territory.expanse().screenspace().center() + drag_request.drag_delta(), 
+            connected_territory.expanse().screenspace().size()
+        );
+        checked_screenspace_rects.push(checked_rect);
+    }
+
+    // Modify DragRequest's drag delta if one of the territories is found outside the window rect. 
+    for territory_rect in checked_screenspace_rects {
+        if window_rect.contains(territory_rect.min) && window_rect.contains(territory_rect.max) { continue; }
+
+        if territory_rect.min.x < 0.0 { drag_request.add_to_drag_delta_x(-1.0 * territory_rect.min.x); } // Left
+        if territory_rect.min.y < 0.0 { drag_request.add_to_drag_delta_y(-1.0 * territory_rect.min.y); } // Top
+        if territory_rect.max.x > window.width() { drag_request.add_to_drag_delta_x(window.width() - territory_rect.max.x); } // Right
+        if territory_rect.max.y > window.height() { drag_request.add_to_drag_delta_y(window.height() - territory_rect.max.y); } // Bottom
+    }
+}
+
+/// Scan through all retreating resize directions and make sure no minimum sizes are breached.
+/// Pare back resize magnitudes until they become negative, at which point remove the ResizeRequest.
+/// If pared back, update advancing groups too.
+pub fn territory_resize_request_check_minimums (
+    mut commands: Commands,
+    mut resize_request_query: Query<&mut ResizeRequest>,
+    mut retreating_query: Query<
+        (&mut RetreatingTerritoryGroup, &Territory), 
+        (Without<ResizeRequest>, Without<AdvancingTerritoryGroup>)
+    >,
+    mut advancing_query: Query<
+        (&mut AdvancingTerritoryGroup, &Territory),
+        (Without<ResizeRequest>, Without<RetreatingTerritoryGroup>)
+    >
+) {
+    // Check our special potentially-multi-sided OG territory that started all of this first:
+    let Ok(resize_request) = resize_request_query.get_single_mut() else {
+        error!("Could not find single resize request territory!");
+        return;
+    };
+
+    // Stash for our most acceptable resize magnitude. Updated as territories are checked.
+    // If this hits below 0.0, the resize request is canceled!
+    let mut acceptable_retreat_magnitude = ResizeMagnitude::None;
+
+    for cardinal_direction in resize_request.resize_direction().get_cardinal_directions() {
+        let mut checked_magnitude = cardinal_direction.get_single_magnitude();
+        if checked_magnitude.is_retreating() {
+            
+            let magnitude_overreach;
+            match cardinal_direction {
+                ResizeDirection::North {..} | ResizeDirection::South {..} => {
+                    magnitude_overreach = resize_request.proposed_expanse().screenspace().height() - SIGNET_SIZE.y;
+                },
+                ResizeDirection::East {..} | ResizeDirection::West {..} => {
+                    magnitude_overreach = resize_request.proposed_expanse().screenspace().width() - SIGNET_SIZE.x;
+                }
+                _ => {
+                    error!("Single magnitude found from multi magnitude resize direction??");
+                    continue;
+                }
+            };
+            // If this is negative, then we've breached a minimum size.
+            if magnitude_overreach < 0.0 {
+                checked_magnitude.add(magnitude_overreach);
+                match acceptable_retreat_magnitude {
+                    ResizeMagnitude::None => { acceptable_retreat_magnitude = checked_magnitude; },
+                    ResizeMagnitude::Retreating(x) => {
+                        if x > checked_magnitude.get() { acceptable_retreat_magnitude = checked_magnitude; }
+                    },
+                    ResizeMagnitude::Advancing(x) => { warn!("acceptable_retreat_magnitude was {:?}??", ResizeMagnitude::Advancing(x)); } 
+                }
+            }
+            
+        }
+    }
+
+    // Now check everyone else - single side resizes only thankfully.
+    for (retreating_territory_group, territory) in &mut retreating_query {
+        let magnitude_overreach;
+        let retreat_direction = retreating_territory_group.resize_direction();
+        let retreat_magnitude = retreat_direction.get_single_magnitude();
+
+        // Acceptable_retreat_magnitude can still be None, so we can't reliably use it.
+        if retreat_magnitude.get() > acceptable_retreat_magnitude.get() {
+            retreat_magnitude.set(acceptable_retreat_magnitude.get());
+        }
+
+        match retreat_direction {
+            ResizeDirection::North {..} | ResizeDirection::South {..} => {
+                magnitude_overreach = territory.expanse().screenspace().height() - retreat_magnitude.get() - SIGNET_SIZE.y;
+            },
+            ResizeDirection::East {..} | ResizeDirection::West {..} => {
+                magnitude_overreach = territory.expanse().screenspace().width() - retreat_magnitude.get() - SIGNET_SIZE.x;
+            },
+            _ => {
+                warn!("Resize direction should have been cardinal!");
+                continue;
+            }
+        }
+
+        if magnitude_overreach < 0.0 {
+            checked_magnitude.add(magnitude_overreach);
+            match acceptable_retreat_magnitude {
+                ResizeMagnitude::None => { acceptable_retreat_magnitude = checked_magnitude; },
+                ResizeMagnitude::Retreating(x) => {
+                    if x > checked_magnitude.get() { acceptable_retreat_magnitude = checked_magnitude; }
+                },
+                ResizeMagnitude::Advancing(x) => { warn!("acceptable_retreat_magnitude was {:?}??", ResizeMagnitude::Advancing(x)); } 
+            }
+        }
+    }
+
+    if acceptable_retreat_magnitude.is_negative() {
+        // oh nooo  remove the reuqest!!!
+    }
+
+    // Apply to advancing if we're good. TODO
+    
+}
+
+/// Handle [`ResizeRequest`]s that try to expand the [`Territory`] beyond the window edge.  
+///   
+/// This is better handled in **screenspace**.
+pub fn territory_resize_request_window_edge (
+    window_query: Query<(&Window, &Children), With<TerritoryTabs>>,
+    mut resizing_territories_query: Query<&ResizeRequest, With<Territory>>
+) {
+    for (window, window_children) in & window_query {
+
+        let mut resizing_territories = resizing_territories_query.iter_many_mut(window_children);
+
+        while let Some(resize_request) = resizing_territories.fetch_next() {
+
+            let (window_width, window_height) = (window.width(), window.height());
+
+            if resize_request.proposed_expanse().is_inside_screenspace_window(window_width, window_height) {
+                continue;
+            }
+
+            let window_rect = Rect::from_corners(Vec2::ZERO, Vec2::new(window_width, window_height));
+            let new_rect = window_rect.intersect(resize_request.proposed_expanse().screenspace());
+            resize_request.proposed_expanse().set_screenspace(new_rect, window_width, window_height);
+        }
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 /// Initial check of all [`Territory`]s who have a [`MoveRequest`] component and catch any odd requests.
 /// Any [`Locked`] [`Territory`]s will have their [`MoveRequest`] component removed.

@@ -5,6 +5,8 @@ use bevy::prelude::*;
 /// And **worldspace** (center is origin and y goes up).\
 /// Contains an `interaction_pos` for stashing the relative location of the mouse to a specific entity.
 /// Also stores the window, territory, and tab entity hovered over, if applicable.
+/// 
+/// TODO: Refactor this out!
 #[derive(Resource)]
 pub struct WorldMousePosition {
     pub screenspace_pos: Vec2,

@@ -1,22 +1,18 @@
+//! Old egui "implementation". Need to see if bevy_egui can put an EguiContext in a node for future implementation.
+
 use bevy::prelude::*;
 use bevy_egui::{egui, EguiContext};
 
 use crate::components_ui::*;
 use crate::resources_ui::*;
 use crate::components_territory::*;
-use crate::systems_common::TerritoryTabsState;
-
-// Insert egui related resources.
-pub fn initialize_egui_resources (mut commands: Commands) {
-    
-}
 
 // egui Debug Info Window until we get Tabs up and running.
 pub fn display_debug_info_with_egui(
     territory_tabs_current_state: Res<State<TerritoryTabsMode>>,
     mut window_query: Query<(Entity, &Window, &mut EguiContext)>
 ) {
-    for (window_entity, window, mut context) in &mut window_query {
+    for (_window_entity, _window, mut context) in &mut window_query {
         egui::Window::new("Debug Window")
             .title_bar(false)
             .default_pos(egui::Pos2::new(0.0, 0.0))
@@ -62,8 +58,7 @@ pub fn display_territory_egui (
     mut commands: Commands,
     territory_settings: Res<TerritorySettings>,
     mut window_query: Query<(Entity, &Window, &mut EguiContext)>,
-    territory_query: Query<(Entity, &Parent, &Territory, &DisplayLibrary), Without<Overlay>>,
-    overlay_query: Query<(Entity, &Parent, &Territory, &DisplayLibrary), With<Overlay>>
+    territory_query: Query<(Entity, &Parent, &Territory, &DisplayLibrary), Without<Overlay>>
 ) {
     for (
         window_entity, 
@@ -159,7 +154,7 @@ pub fn display_territory_egui (
                                         )
                                     );
 
-                                    let delta_min = Vec2::new(
+                                    let _delta_min = Vec2::new(
                                         actual_egui_rect.min.x - requested_egui_rect.min.x, 
                                         actual_egui_rect.min.y - requested_egui_rect.min.y
                                     );

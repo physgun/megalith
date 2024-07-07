@@ -1,8 +1,6 @@
 use bevy::prelude::*;
 use leafwing_input_manager::prelude::*;
 
-use crate::components_territory::*;
-
 #[derive(Actionlike, PartialEq, Eq, Clone, Copy, Hash, Debug, Reflect)]
 pub enum DevControls {
     TestChord,
@@ -45,23 +43,6 @@ pub fn test_delete_all_territories_just_pressed (
 ) {
     if dev_controls.pressed(&DevControls::TestRemoveAllTerritories) {
         remove_territories_key_pressed.send(RemoveTerritoriesKeyPressed);
-    }
-}
-
-// Remove all Territories when this key is pressed.
-pub fn test_delete_all_territories (
-    mut commands: Commands,
-    mut remove_territories_key_pressed: EventReader<RemoveTerritoriesKeyPressed>,
-    window_query: Query<&Children, With<Window>>,
-    territory_query: Query<Entity, With<Territory>>
-) {
-    for _event in remove_territories_key_pressed.read() {
-        for window_children in & window_query {
-            let mut territories = territory_query.iter_many(window_children);
-            while let Some(territory_entity) =  territories.fetch_next(){
-                commands.entity(territory_entity).despawn_recursive();
-            }
-        }
     }
 }
 

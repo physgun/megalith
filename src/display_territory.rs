@@ -32,7 +32,7 @@ impl TerritoryNodes for Territory {
                     overflow: Overflow::clip(),
                     ..default()
                 },
-                background_color: BackgroundColor(Color::rgb_u8(60, 91, 111)),
+                background_color: BackgroundColor(Color::srgb_u8(60, 91, 111)),
                 focus_policy: bevy::ui::FocusPolicy::Block,
                 ..default()
             },
@@ -54,7 +54,7 @@ impl TerritoryNodes for Territory {
                     border: UiRect::all(Val::Px(1.0)),
                     ..default()
                 },
-                border_color: BorderColor(Color::rgb_u8(93, 235, 215)),
+                border_color: BorderColor(Color::srgb_u8(93, 235, 215)),
                 ..default()
             }
         )
@@ -118,28 +118,28 @@ impl TerritoryNodes for Territory {
         let name;
         let (grid_row_location, grid_column_location) = resize_direction.get_css_grid_location();
         match resize_direction {
-            ResizeDirection::North => {
+            ResizeDirection::North{..} => {
                 name = format!("[NODE] Territory Resize Button Node - {:?}", resize_direction);
             },
-            ResizeDirection::NorthEast => {
+            ResizeDirection::NorthEast{..} => {
                 name = format!("[NODE] Territory Resize Button Node - {:?}", resize_direction);
             },
-            ResizeDirection::East => {
+            ResizeDirection::East{..} => {
                 name = format!("[NODE] Territory Resize Button Node - {:?}", resize_direction);
             },
-            ResizeDirection::SouthEast => {
+            ResizeDirection::SouthEast{..} => {
                 name = format!("[NODE] Territory Resize Button Node - {:?}", resize_direction);
             },
-            ResizeDirection::South => {
+            ResizeDirection::South{..} => {
                 name = format!("[NODE] Territory Resize Button Node - {:?}", resize_direction);
             },
-            ResizeDirection::SouthWest => {
+            ResizeDirection::SouthWest{..} => {
                 name = format!("[NODE] Territory Resize Button Node - {:?}", resize_direction);
             },
-            ResizeDirection::West => {
+            ResizeDirection::West{..} => {
                 name = format!("[NODE] Territory Resize Button Node - {:?}", resize_direction);
             },
-            ResizeDirection::NorthWest => {
+            ResizeDirection::NorthWest{..} => {
                 name = format!("[NODE] Territory Resize Button Node - {:?}", resize_direction);
             }
         };
@@ -215,7 +215,7 @@ pub fn spawn_territory (
                 commands.entity(border_node_entity).add_child(drag_node_entity);
 
                 commands.entity(base_node_entity).add_child(resize_node_entity);
-                for resize_direction in ResizeDirection::ALL {
+                for resize_direction in ResizeDirection::ORDINAL {
                     let new_resize_button = commands.spawn(new_territory.resize_button_template(resize_direction)).id();
                     commands.entity(resize_node_entity).add_child(new_resize_button);
                 }
@@ -235,7 +235,8 @@ pub fn spawn_territory (
                 Name::new("[TERRITORY] Base"),
                 new_territory,
                 SpatialBundle::default(),
-                spawn_event.display_library
+                spawn_event.display_library,
+                CardinalConnections::default()
             )
         ).id();
 

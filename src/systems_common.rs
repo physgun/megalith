@@ -21,10 +21,18 @@ pub enum TerritoryTabsState {
     LoadingLayouts // User is loading in a saved layout of Territories & Tabs. Existing ones cannot be interacted with.
 }
 
-/// General purpose cleanup for all entities with a specified component.
-pub fn cleanup_all_entities_with<T: Component> (
+/// Remove all entities with a specified component.
+pub fn despawn_all_entities_with<T: Component> (
     mut commands: Commands,
     cleanup_query: Query<Entity, With<T>>
 ) {
     cleanup_query.iter().for_each(|target| {commands.entity(target).despawn_recursive();});
+}
+
+/// Remove all existing components of type T.
+pub fn remove_all_components_of_type<T: Component> (
+    mut commands: Commands,
+    cleanup_query: Query<Entity, With<T>>
+) {
+    cleanup_query.iter().for_each(|target| {commands.entity(target).remove::<T>();});
 }

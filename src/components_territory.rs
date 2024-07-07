@@ -2,8 +2,8 @@
 
 use bevy::prelude::*;
 
-/// Smallest size of an icon.
-const ICON_SIZE: Vec2 = Vec2 { x: 20.0, y: 20.0 };
+/// Smallest size of a signet.
+pub const SIGNET_SIZE: Vec2 = Vec2 { x: 20.0, y: 20.0 };
 
 /// Settings governing the basic size behavior of all entities with [`Territory`] components. 
 #[derive(Resource)]
@@ -20,140 +20,11 @@ pub struct GlobalTerritorySettings {
 impl Default for GlobalTerritorySettings{
     fn default() -> Self {
         GlobalTerritorySettings {
-            min_size: ICON_SIZE,
+            min_size: SIGNET_SIZE,
             default_size: Vec2 { x: 600.0, y: 200.0 },
             inner_margins: Vec2 { x: 3.0, y: 3.0 },
             outer_margins: Vec2 { x: 2.5, y: 2.5 }
         }
-    }
-}
-
-/// Combined with a `Window` component, denotes a window entity as a space to run `Territory Tabs` logic.
-/// Display libraries will attach their root nodes and contexts to the entity with this component.
-#[derive(Component)]
-pub struct TerritoryTabs;
-
-/// Identifies the camera that will display `Territory Tabs` UI.
-#[derive(Component)]
-pub struct TerritoryTabsCamera;
-
-#[derive(Component)]
-/// Identifies the UI Root Node associated with a [`Window`] [`Entity`].
-pub struct TerritoryTabsUIRoot {
-    /// The [`Window`] [`Entity`] this root node marker component is associated with, but not attached directly to.
-    /// This is a different [`Entity`] than the one the root node bundle & [`TerritoryTabsUIRoot`] is attached to!  
-    /// \
-    /// bevy_ui queries for root nodes by looking for nodes without a [`Parent`], so the root node can't be connected
-    /// to the [`Window`] that way. Another use case for entity relations, when they get here!
-    pub associated_window_entity: Entity
-}
-
-/// Denotes the [`Entity`] as containing the base node for a [`Territory`] [`Entity`].
-#[derive(Component)]
-pub struct TerritoryBaseNode;
-
-/// Denotes the [`Entity`] as containing the drag node for a [`Territory`] [`Entity`].
-#[derive(Component)]
-pub struct TerritoryDragNode;
-
-/// Denotes the [`Entity`] as containing the resize grid node for a [`Territory`] [`Entity`].
-#[derive(Component)]
-pub struct TerritoryResizeGridNode;
-
-/// Denotes the [`Entity`] as containing the individual resize button node for a [`Territory`] [`Entity`].
-#[derive(Component)]
-pub struct TerritoryResizeButtonNode;
-
-
-/// App State communicating the operating Mode of the `Territory Tabs` UI.
-#[derive(States, Default, Debug, Clone, PartialEq, Eq, Hash)]
-pub enum TerritoryTabsMode {
-    #[default]
-    /// The user has managed to remove everything, leaving them stuck. A button to spawn a Territory should be presented.
-    Empty,
-    /// Nominal state. The user is operating features present in the UI.
-    Operating,
-    /// User is changing the layout. Helper overlays should be spawned. 
-    MovingTerritories,
-    /// User is repositioning a feature, and may spawn a new Territory.
-    MovingTabs
-}
-
-/// Defines what library will be used to display UI. Add to a `Window` entity to set a default. Add to a `Territory`
-/// or a `Tab` entity to override that default.
-#[derive(Component, Clone, Copy)]
-pub enum DisplayLibrary {
-    BevyUi,
-    BevyEgui,
-    BevySickle
-}
-
-/// Every UI library that handles resizing has this exact enum. This idea with having our own here 
-/// is to implement an extension trait for translating to each library, but only in the modules that interact 
-/// with that library. Hopefully this will maintain both a decoupled architecture with the 
-/// display libraries and to keep Territory Tabs flexible with regard to what libraries it can use.
-#[derive(Component, Clone, Copy, Debug)]
-pub enum ResizeDirection {
-    North,
-    NorthEast,
-    East,
-    SouthEast,
-    South,
-    SouthWest,
-    West,
-    NorthWest
-}
-
-impl ResizeDirection {
-    
-    /// Width of the resizing bar buttons, and both the height and width of the corner ones.
-    pub const SIZE: f32 = 5.0;
-
-    /// Helper for iterating through all the directions.
-    pub const ALL: [Self; 8] = [
-        Self::North,
-        Self::NorthEast,
-        Self::East,
-        Self::SouthEast,
-        Self::South,
-        Self::SouthWest,
-        Self::West,
-        Self::NorthWest
-    ];
-
-    /// If you're using a 3x3 CSS grid node to place the resize drag buttons, 
-    /// you can use this to get the appropriate (row, column) location.  
-    ///   
-    /// If called on a [`ResizeDirection::West`], then you'll get `(GridPlacement::start(2), GridPlacement::start(1))`.
-    pub fn get_css_grid_location(&self) -> (GridPlacement, GridPlacement) {
-        let (row, column) = match self {
-            Self::North => {( 1, 2) },
-            Self::NorthEast => { (1, 3) },
-            Self::East => { (2, 3 ) },
-            Self::SouthEast => { (3, 3) },
-            Self::South => { (3, 2) },
-            Self::SouthWest => { (3, 1) },
-            Self::West => { (2, 1) },
-            Self::NorthWest => { (1, 1) }
-        };
-        (GridPlacement::start(row), GridPlacement::start(column))
-    }
-
-    /// Add the correct mouse delta [`Vec2`], depending on [`ResizeDirection`], to a [`Rect`] in **screenspace** coordinates.  
-    ///  
-    /// If, say, [`ResizeDirection::SouthWest`], then the returned [`Rect`] will be the result of `rect.min.x += delta.x; rect.max.y += delta.y`:
-    pub fn add_delta_to_rect(&self, mut rect: Rect, delta: Vec2) -> Rect {
-        match self {
-            &Self::North => { rect.min.y += delta.y; },
-            &Self::NorthEast => { rect.min.y += delta.y; rect.max.x += delta.x },
-            &Self::East => { rect.max.x += delta.x },
-            &Self::SouthEast => { rect.max += delta; },
-            &Self::South => { rect.max.y += delta.y },
-            &Self::SouthWest => { rect.min.x += delta.x; rect.max.y += delta.y },
-            &Self::West => { rect.min.x += delta.x },
-            &Self::NorthWest => { rect.min += delta },
-        }
-        rect
     }
 }
 
@@ -510,17 +381,877 @@ impl RectKit {
     }
 }
 
-/// Denotes what side of the [`Territory`] one of the four [`TabTrim`]s will occupy.
-pub enum TabTrimType {
-    North,
-    East,
-    South,
-    West
+/// Combined with a `Window` component, denotes a window entity as a space to run `Territory Tabs` logic.
+/// Display libraries will attach their root nodes and contexts to the entity with this component.
+#[derive(Component)]
+pub struct TerritoryTabs;
+
+/// Identifies the camera that will display `Territory Tabs` UI.
+#[derive(Component)]
+pub struct TerritoryTabsCamera;
+
+#[derive(Component)]
+/// Identifies the UI Root Node associated with a [`Window`] [`Entity`].
+pub struct TerritoryTabsUIRoot {
+    /// The [`Window`] [`Entity`] this root node marker component is associated with, but not attached directly to.
+    /// This is a different [`Entity`] than the one the root node bundle & [`TerritoryTabsUIRoot`] is attached to!  
+    /// \
+    /// bevy_ui queries for root nodes by looking for nodes without a [`Parent`], so the root node can't be connected
+    /// to the [`Window`] that way. Another use case for entity relations, when they get here!
+    pub associated_window_entity: Entity
 }
 
-/// Border area of the [`Territory`] that hosts the feature tabs.
+/// Denotes the [`Entity`] as containing the base node for a [`Territory`] [`Entity`].
+#[derive(Component)]
+pub struct TerritoryBaseNode;
+
+/// Denotes the [`Entity`] as containing the drag node for a [`Territory`] [`Entity`].
+#[derive(Component)]
+pub struct TerritoryDragNode;
+
+/// Denotes the [`Entity`] as containing the resize grid node for a [`Territory`] [`Entity`].
+#[derive(Component)]
+pub struct TerritoryResizeGridNode;
+
+/// Denotes the [`Entity`] as containing the individual resize button node for a [`Territory`] [`Entity`].
+#[derive(Component)]
+pub struct TerritoryResizeButtonNode;
+
+/// App State communicating the operating Mode of the `Territory Tabs` UI.
+#[derive(States, Default, Debug, Clone, PartialEq, Eq, Hash)]
+pub enum TerritoryTabsMode {
+    #[default]
+    /// The user has managed to remove everything, leaving them stuck. A button to spawn a Territory should be presented.
+    Empty,
+    /// Nominal state. The user is operating features present in the UI.
+    Operating,
+    /// User is changing the layout. Helper overlays should be spawned. 
+    MovingTerritories,
+    /// User is repositioning a feature, and may spawn a new Territory.
+    MovingTabs
+}
+
+/// User has marked this UI element as `Locked`, and they don't want any systems moving it around!
+#[derive(Component)]
+pub struct Locked;
+
+/// Defines what library will be used to display UI. Add to a `Window` entity to set a default. Add to a `Territory`
+/// or a `Tab` entity to override that default.
 #[derive(Component, Clone, Copy)]
-pub struct TabTrim {
+pub enum DisplayLibrary {
+    BevyUi,
+    BevyEgui,
+    BevySickle
+}
+
+/// Every UI library that handles resizing has this exact enum. This idea with having our own here 
+/// is to implement extension traits for translating to each library, but only in the modules that interact 
+/// with that library. Hopefully this will maintain both a decoupled architecture with the 
+/// display libraries and to keep Territory Tabs flexible with regard to what libraries it can use.
+#[derive(Component, Clone, Copy, Debug, PartialEq)]
+pub enum ResizeDirection {
+    North { northward_magnitude: ResizeMagnitude },
+    NorthEast { northward_magnitude: ResizeMagnitude, eastward_magnitude: ResizeMagnitude },
+    East { eastward_magnitude: ResizeMagnitude },
+    SouthEast { southward_magnitude: ResizeMagnitude, eastward_magnitude: ResizeMagnitude },
+    South { southward_magnitude: ResizeMagnitude },
+    SouthWest { southward_magnitude: ResizeMagnitude, westward_magnitude: ResizeMagnitude },
+    West { westward_magnitude: ResizeMagnitude },
+    NorthWest { northward_magnitude: ResizeMagnitude, westward_magnitude: ResizeMagnitude }
+}
+
+impl ResizeDirection {
+    
+    /// Width of the resizing bar buttons, and both the height and width of the corner ones.
+    pub const SIZE: f32 = 5.0;
+
+    /// Helper for iterating through all the ordinal directions.
+    pub const ORDINAL: [Self; 8] = [
+        Self::North { northward_magnitude: ResizeMagnitude::None },
+        Self::NorthEast { northward_magnitude: ResizeMagnitude::None, eastward_magnitude: ResizeMagnitude::None },
+        Self::East { eastward_magnitude: ResizeMagnitude::None },
+        Self::SouthEast { southward_magnitude: ResizeMagnitude::None, eastward_magnitude: ResizeMagnitude::None },
+        Self::South { southward_magnitude: ResizeMagnitude::None },
+        Self::SouthWest { southward_magnitude: ResizeMagnitude::None, westward_magnitude: ResizeMagnitude::None },
+        Self::West { westward_magnitude: ResizeMagnitude::None },
+        Self::NorthWest { northward_magnitude: ResizeMagnitude::None, westward_magnitude: ResizeMagnitude::None }
+    ];
+
+    /// Gets the [`ResizeMagnitude`] wrapped within a single-sided cardinal direction.
+    /// For multisided, call [`ResizeDirection::get_cardinal_directions`] first and iterate.
+    ///   
+    /// Cardinal directions are North, East, South, West. All else return [`ResizeMagnitude::None`].
+    pub fn get_single_magnitude (&self) -> ResizeMagnitude {
+        match self {
+            ResizeDirection::North { northward_magnitude } => { *northward_magnitude },
+            ResizeDirection::East { eastward_magnitude } => { *eastward_magnitude },
+            ResizeDirection::South { southward_magnitude } => { *southward_magnitude },
+            ResizeDirection::West { westward_magnitude } => { *westward_magnitude },
+            ResizeDirection::NorthEast {..} | ResizeDirection::SouthEast {..} | ResizeDirection::SouthWest {..} | ResizeDirection::NorthWest {..}
+            => { ResizeMagnitude::None }
+        }
+    }
+
+    /// Gets the opposite resize direction and magnitude.
+    pub fn get_opposite(&self) -> Self {
+        match self {
+            Self::North { northward_magnitude } => { 
+                ResizeDirection::South { southward_magnitude: northward_magnitude.get_opposite() } 
+            },
+            Self::NorthEast { northward_magnitude, eastward_magnitude } => { 
+                ResizeDirection::SouthWest { 
+                    southward_magnitude: northward_magnitude.get_opposite(),
+                    westward_magnitude: eastward_magnitude.get_opposite()
+                }
+            },
+            Self::East { eastward_magnitude } => { 
+                ResizeDirection::West { westward_magnitude: eastward_magnitude.get_opposite() } 
+            },
+            Self::SouthEast { southward_magnitude, eastward_magnitude } => { 
+                ResizeDirection::NorthWest {
+                    northward_magnitude: southward_magnitude.get_opposite(),
+                    westward_magnitude: eastward_magnitude.get_opposite()
+                } 
+            },
+            Self::South { southward_magnitude } => { 
+                ResizeDirection::North { northward_magnitude: southward_magnitude.get_opposite() }
+            },
+            Self::SouthWest { southward_magnitude, westward_magnitude } => { 
+                ResizeDirection::NorthEast {
+                    northward_magnitude: southward_magnitude.get_opposite(),
+                    eastward_magnitude: westward_magnitude.get_opposite()
+                }
+            },
+            Self::West { westward_magnitude } => { 
+                ResizeDirection::East { eastward_magnitude: westward_magnitude.get_opposite() }
+            },
+            Self::NorthWest { northward_magnitude, westward_magnitude } => { 
+                ResizeDirection::SouthEast {
+                    southward_magnitude: northward_magnitude.get_opposite(),
+                    eastward_magnitude: westward_magnitude.get_opposite()
+                } 
+            }
+        }
+    }
+
+    /// Returns a [`Vec`] of the [`ResizeDirection`] broken down into its composite cardinal points.  
+    ///   
+    /// [`ResizeDirection::SouthWest`] will give `vec!(ResizeDirection::South, ResizeDirection::West)`. All magnitudes transfer.
+    pub fn get_cardinal_directions(&self) -> Vec<ResizeDirection> {
+        let mut result_vec: Vec<ResizeDirection> = Vec::new();
+        match self {
+            Self::North { northward_magnitude } => { 
+                result_vec.push(ResizeDirection::North { northward_magnitude: *northward_magnitude }); 
+            },
+            Self::NorthEast { northward_magnitude, eastward_magnitude } => { 
+                result_vec.push(ResizeDirection::North { northward_magnitude: *northward_magnitude }); 
+                result_vec.push(ResizeDirection::East { eastward_magnitude: *eastward_magnitude }); 
+            },
+            Self::East { eastward_magnitude } => { 
+                result_vec.push(ResizeDirection::East { eastward_magnitude: *eastward_magnitude }); 
+            },
+            Self::SouthEast { southward_magnitude, eastward_magnitude } => { 
+                result_vec.push(ResizeDirection::South { southward_magnitude: *southward_magnitude }); 
+                result_vec.push(ResizeDirection::East {eastward_magnitude: *eastward_magnitude }); 
+            },
+            Self::South { southward_magnitude } => { 
+                result_vec.push(ResizeDirection::South { southward_magnitude: *southward_magnitude }); 
+            },
+            Self::SouthWest { southward_magnitude, westward_magnitude } => { 
+                result_vec.push(ResizeDirection::South { southward_magnitude: *southward_magnitude }); 
+                result_vec.push(ResizeDirection::West { westward_magnitude: *westward_magnitude }); 
+            },
+            Self::West { westward_magnitude } => { 
+                result_vec.push(ResizeDirection::West { westward_magnitude: *westward_magnitude }); 
+            },
+            Self::NorthWest { northward_magnitude, westward_magnitude } => { 
+                result_vec.push(ResizeDirection::North { northward_magnitude: *northward_magnitude }); 
+                result_vec.push(ResizeDirection::West { westward_magnitude: *westward_magnitude }); 
+            }
+        }
+        result_vec
+    }
+
+    /// If you're using a 3x3 CSS grid node to place the resize drag buttons, 
+    /// you can use this to get the appropriate (row, column) location.  
+    ///   
+    /// If called on a [`ResizeDirection::West`], then you'll get `(GridPlacement::start(2), GridPlacement::start(1))`.
+    pub fn get_css_grid_location(&self) -> (GridPlacement, GridPlacement) {
+        let (row, column) = match self {
+            Self::North {..} => { ( 1, 2) },
+            Self::NorthEast {..} => { (1, 3) },
+            Self::East {..} => { (2, 3 ) },
+            Self::SouthEast {..} => { (3, 3) },
+            Self::South {..} => { (3, 2) },
+            Self::SouthWest {..} => { (3, 1) },
+            Self::West {..} => { (2, 1) },
+            Self::NorthWest {..} => { (1, 1) }
+        };
+        (GridPlacement::start(row), GridPlacement::start(column))
+    }
+
+    /// Modifies a given [`Rect`] with the current [`ResizeDirection`]'s magnitudes in **screenspace**.
+    pub fn apply_to_rect(&self, mut rect: Rect) -> Rect {
+        match self {
+            Self::North { northward_magnitude } => {
+                match northward_magnitude {
+                    ResizeMagnitude::None => { debug!("Resize direction with no magnitude applied to rect!"); },
+                    ResizeMagnitude::Advancing(y) => { rect.min.y -= y },
+                    ResizeMagnitude::Retreating(y) => { rect.min.y += y }
+                }
+            },
+            Self::NorthEast { northward_magnitude, eastward_magnitude} => {
+                match northward_magnitude {
+                    ResizeMagnitude::None => {  },
+                    ResizeMagnitude::Advancing(y) => { rect.min.y -= y },
+                    ResizeMagnitude::Retreating(y) => { rect.min.y += y }
+                };
+                match eastward_magnitude {
+                    ResizeMagnitude::None => {  },
+                    ResizeMagnitude::Advancing(x) => { rect.max.x += x },
+                    ResizeMagnitude::Retreating(x) => { rect.max.x -= x }
+                }
+            },
+            Self::East { eastward_magnitude } => {
+                match eastward_magnitude {
+                    ResizeMagnitude::None => { debug!("Resize direction with no magnitude applied to rect!"); },
+                    ResizeMagnitude::Advancing(x) => { rect.max.x += x },
+                    ResizeMagnitude::Retreating(x) => { rect.max.x -= x }
+                }
+            },
+            Self::SouthEast { southward_magnitude, eastward_magnitude } => {
+                match southward_magnitude {
+                    ResizeMagnitude::None => {  },
+                    ResizeMagnitude::Advancing(y) => { rect.max.y += y },
+                    ResizeMagnitude::Retreating(y) => { rect.max.y -= y }
+                };
+                match eastward_magnitude {
+                    ResizeMagnitude::None => {  },
+                    ResizeMagnitude::Advancing(x) => { rect.max.x += x },
+                    ResizeMagnitude::Retreating(x) => { rect.max.x -= x }
+                }
+            },
+            Self::South { southward_magnitude } => {
+                match southward_magnitude {
+                    ResizeMagnitude::None => { debug!("Resize direction with no magnitude applied to rect!"); },
+                    ResizeMagnitude::Advancing(y) => { rect.max.y += y },
+                    ResizeMagnitude::Retreating(y) => { rect.max.y -= y }
+                }
+            },
+            Self::SouthWest { southward_magnitude, westward_magnitude } => {
+                match southward_magnitude {
+                    ResizeMagnitude::None => {  },
+                    ResizeMagnitude::Advancing(y) => { rect.max.y += y },
+                    ResizeMagnitude::Retreating(y) => { rect.max.y -= y }
+                };
+                match westward_magnitude {
+                    ResizeMagnitude::None => {  },
+                    ResizeMagnitude::Advancing(x) => { rect.min.x -= x },
+                    ResizeMagnitude::Retreating(x) => { rect.min.x += x }
+                }
+            },
+            Self::West { westward_magnitude } => {
+                match westward_magnitude {
+                    ResizeMagnitude::None => { debug!("Resize direction with no magnitude applied to rect!"); },
+                    ResizeMagnitude::Advancing(x) => { rect.min.x -= x },
+                    ResizeMagnitude::Retreating(x) => { rect.min.x += x }
+                }
+            },
+            Self::NorthWest { northward_magnitude, westward_magnitude } => {
+                match northward_magnitude {
+                    ResizeMagnitude::None => {  },
+                    ResizeMagnitude::Advancing(y) => { rect.min.y -= y },
+                    ResizeMagnitude::Retreating(y) => { rect.min.y += y }
+                };
+                match westward_magnitude {
+                    ResizeMagnitude::None => {  },
+                    ResizeMagnitude::Advancing(x) => { rect.min.x -= x },
+                    ResizeMagnitude::Retreating(x) => { rect.min.x += x }
+                }
+            },
+        }
+        rect
+    }
+
+    /// Add the correct mouse delta [`Vec2`], depending on [`ResizeDirection`], to a [`Rect`] in **screenspace** coordinates.  
+    ///  
+    /// If, say, [`ResizeDirection::SouthWest`], then the returned [`Rect`] will be the result of `rect.min.x += delta.x; rect.max.y += delta.y`:
+    pub fn add_delta_to_rect(&self, mut rect: Rect, delta: Vec2) -> Rect {
+        match self {
+            Self::North {..} => { rect.min.y += delta.y; },
+            Self::NorthEast {..} => { rect.min.y += delta.y; rect.max.x += delta.x },
+            Self::East {..} => { rect.max.x += delta.x },
+            Self::SouthEast {..} => { rect.max += delta; },
+            Self::South {..} => { rect.max.y += delta.y },
+            Self::SouthWest {..} => { rect.min.x += delta.x; rect.max.y += delta.y },
+            Self::West {..} => { rect.min.x += delta.x },
+            Self::NorthWest {..} => { rect.min += delta },
+        }
+        rect
+    }
+
+    /// Returns `true` if the [`ResizeDirection`] has more than one advancing or retreating magnitude.
+    pub fn is_multi_side_resize(&self) -> bool {
+        let mut counter = 0;
+        match self {
+            Self::North {..} | Self::East {..} | Self::South {..} | Self::West {..} => { return false; },
+            Self::NorthEast { northward_magnitude, eastward_magnitude } => { 
+                if matches!(northward_magnitude, ResizeMagnitude::Advancing(_) | ResizeMagnitude::Retreating(_)) { counter += 1;}
+                if matches!(eastward_magnitude, ResizeMagnitude::Advancing(_) | ResizeMagnitude::Retreating(_)) { counter += 1;} 
+            },
+            Self::SouthEast { southward_magnitude, eastward_magnitude } => { 
+                if matches!(southward_magnitude, ResizeMagnitude::Advancing(_) | ResizeMagnitude::Retreating(_)) { counter += 1;} 
+                if matches!(eastward_magnitude, ResizeMagnitude::Advancing(_) | ResizeMagnitude::Retreating(_)) { counter += 1;} 
+            },
+            Self::SouthWest { southward_magnitude, westward_magnitude } => { 
+                if matches!(southward_magnitude, ResizeMagnitude::Advancing(_) | ResizeMagnitude::Retreating(_)) { counter += 1;} 
+                if matches!(westward_magnitude, ResizeMagnitude::Advancing(_) | ResizeMagnitude::Retreating(_)) { counter += 1;} 
+            },
+            Self::NorthWest { northward_magnitude, westward_magnitude } => { 
+                if matches!(northward_magnitude, ResizeMagnitude::Advancing(_) | ResizeMagnitude::Retreating(_)) { counter += 1;} 
+                if matches!(westward_magnitude, ResizeMagnitude::Advancing(_) | ResizeMagnitude::Retreating(_)) { counter += 1;} 
+            }
+        }
+        if counter > 1 { true } else { false }
+    }
+
+    /// Returns `true` if the [`ResizeDirection`] has all [`ResizeMagnitude::None`].  
+    ///   
+    /// Typically used to check for an uninitialized [`ResizeDirection`].
+    pub fn has_all_none_magnitudes(&self) -> bool {
+        match self {
+            Self::North { northward_magnitude } => { 
+                if matches!(northward_magnitude, ResizeMagnitude::Advancing(_) | ResizeMagnitude::Retreating(_)) { return false; }
+            },
+            Self::NorthEast { northward_magnitude, eastward_magnitude } => { 
+                if matches!(northward_magnitude, ResizeMagnitude::Advancing(_) | ResizeMagnitude::Retreating(_)) { return false; }
+                if matches!(eastward_magnitude, ResizeMagnitude::Advancing(_) | ResizeMagnitude::Retreating(_)) { return false; } 
+            },
+            Self::East { eastward_magnitude } => { 
+                if matches!(eastward_magnitude, ResizeMagnitude::Advancing(_) | ResizeMagnitude::Retreating(_)) { return false; } 
+            },
+            Self::SouthEast { southward_magnitude, eastward_magnitude } => { 
+                if matches!(southward_magnitude, ResizeMagnitude::Advancing(_) | ResizeMagnitude::Retreating(_)) { return false; } 
+                if matches!(eastward_magnitude, ResizeMagnitude::Advancing(_) | ResizeMagnitude::Retreating(_)) { return false; } 
+            },
+            Self::South { southward_magnitude } => { 
+                if matches!(southward_magnitude, ResizeMagnitude::Advancing(_) | ResizeMagnitude::Retreating(_)) { return false; } 
+            },
+            Self::SouthWest { southward_magnitude, westward_magnitude } => { 
+                if matches!(southward_magnitude, ResizeMagnitude::Advancing(_) | ResizeMagnitude::Retreating(_)) { return false; } 
+                if matches!(westward_magnitude, ResizeMagnitude::Advancing(_) | ResizeMagnitude::Retreating(_)) { return false; } 
+            },
+            Self::West { westward_magnitude } => { 
+                if matches!(westward_magnitude, ResizeMagnitude::Advancing(_) | ResizeMagnitude::Retreating(_)) { return false; } 
+            },
+            Self::NorthWest { northward_magnitude, westward_magnitude } => { 
+                if matches!(northward_magnitude, ResizeMagnitude::Advancing(_) | ResizeMagnitude::Retreating(_)) { return false; }
+                if matches!(westward_magnitude, ResizeMagnitude::Advancing(_) | ResizeMagnitude::Retreating(_)) { return false; }
+            }
+        }
+        true
+    }
+
+    /// Returns `true` if the [`ResizeDirection`] contains any [`ResizeMagnitude::Retreating`].  
+    ///   
+    /// Used to detect a possible edge case involving any retreats during a multi-side resize.
+    pub fn has_any_retreating(&self) -> bool {
+        match self {
+            Self::North { northward_magnitude } => { 
+                if matches!(northward_magnitude, ResizeMagnitude::Retreating(_)) { return true; }
+            },
+            Self::NorthEast { northward_magnitude, eastward_magnitude } => { 
+                if matches!(northward_magnitude, ResizeMagnitude::Retreating(_)) { return true; }
+                if matches!(eastward_magnitude, ResizeMagnitude::Retreating(_)) { return true; } 
+            },
+            Self::East { eastward_magnitude } => { 
+                if matches!(eastward_magnitude, ResizeMagnitude::Retreating(_)) { return true; } 
+            },
+            Self::SouthEast { southward_magnitude, eastward_magnitude } => { 
+                if matches!(southward_magnitude, ResizeMagnitude::Retreating(_)) { return true; } 
+                if matches!(eastward_magnitude, ResizeMagnitude::Retreating(_)) { return true; } 
+            },
+            Self::South { southward_magnitude } => { 
+                if matches!(southward_magnitude, ResizeMagnitude::Retreating(_)) { return true; } 
+            },
+            Self::SouthWest { southward_magnitude, westward_magnitude } => { 
+                if matches!(southward_magnitude, ResizeMagnitude::Retreating(_)) { return true; } 
+                if matches!(westward_magnitude, ResizeMagnitude::Retreating(_)) { return true; } 
+            },
+            Self::West { westward_magnitude } => { 
+                if matches!(westward_magnitude, ResizeMagnitude::Retreating(_)) { return true; } 
+            },
+            Self::NorthWest { northward_magnitude, westward_magnitude } => { 
+                if matches!(northward_magnitude, ResizeMagnitude::Retreating(_)) { return true; }
+                if matches!(westward_magnitude, ResizeMagnitude::Retreating(_)) { return true; }
+            }
+        }
+        false
+    }
+
+    /// Using a given **screenspace** delta, set all [`ResizeMagnitude`]s.
+    pub fn set_magnitudes_from_delta(&mut self, delta: Vec2) -> &mut Self {
+        match self {
+            ResizeDirection::North { northward_magnitude } => { 
+                *northward_magnitude = match delta.y {
+                    y if y < 0.0 => { ResizeMagnitude::Advancing(y.abs()) },
+                    y if y == 0.0 => { ResizeMagnitude::None },
+                    y if y > 0.0 => { ResizeMagnitude::Retreating(y) },
+                    _ => { warn!("Unexpected match result from {:?}", delta.y); ResizeMagnitude::None }
+                };
+            },
+            ResizeDirection::NorthEast { northward_magnitude, eastward_magnitude } => {
+                *northward_magnitude = match delta.y {
+                    y if y < 0.0 => { ResizeMagnitude::Advancing(y.abs()) },
+                    y if y == 0.0 => { ResizeMagnitude::None },
+                    y if y > 0.0 => { ResizeMagnitude::Retreating(y) },
+                    _ => { warn!("Unexpected match result from {:?}", delta.y); ResizeMagnitude::None }
+                };
+                *eastward_magnitude = match delta.x {
+                    x if x < 0.0 => { ResizeMagnitude::Retreating(x.abs()) },
+                    x if x == 0.0 => { ResizeMagnitude::None },
+                    x if x > 0.0 => { ResizeMagnitude::Advancing(x) },
+                    _ => { warn!("Unexpected match result from {:?}", delta.x); ResizeMagnitude::None }
+                };
+            },
+            ResizeDirection::East { eastward_magnitude } => {
+                *eastward_magnitude = match delta.x {
+                    x if x < 0.0 => { ResizeMagnitude::Retreating(x.abs()) },
+                    x if x == 0.0 => { ResizeMagnitude::None },
+                    x if x > 0.0 => { ResizeMagnitude::Advancing(x) },
+                    _ => { warn!("Unexpected match result from {:?}", delta.x); ResizeMagnitude::None }
+                };
+            },
+            ResizeDirection::SouthEast { southward_magnitude, eastward_magnitude } => {
+                *southward_magnitude = match delta.y {
+                    y if y < 0.0 => { ResizeMagnitude::Retreating(y.abs()) },
+                    y if y == 0.0 => { ResizeMagnitude::None },
+                    y if y > 0.0 => { ResizeMagnitude::Advancing(y) },
+                    _ => { warn!("Unexpected match result from {:?}", delta.y); ResizeMagnitude::None }
+                };
+                *eastward_magnitude = match delta.x {
+                    x if x < 0.0 => { ResizeMagnitude::Retreating(x.abs()) },
+                    x if x == 0.0 => { ResizeMagnitude::None },
+                    x if x > 0.0 => { ResizeMagnitude::Advancing(x) },
+                    _ => { warn!("Unexpected match result from {:?}", delta.x); ResizeMagnitude::None }
+                };
+            },
+            ResizeDirection::South { southward_magnitude } => {
+                *southward_magnitude = match delta.y {
+                    y if y < 0.0 => { ResizeMagnitude::Retreating(y.abs()) },
+                    y if y == 0.0 => { ResizeMagnitude::None },
+                    y if y > 0.0 => { ResizeMagnitude::Advancing(y) },
+                    _ => { warn!("Unexpected match result from {:?}", delta.y); ResizeMagnitude::None }
+                };
+            },
+            ResizeDirection::SouthWest { southward_magnitude, westward_magnitude } => {
+                *southward_magnitude = match delta.y {
+                    y if y < 0.0 => { ResizeMagnitude::Retreating(y.abs()) },
+                    y if y == 0.0 => { ResizeMagnitude::None },
+                    y if y > 0.0 => { ResizeMagnitude::Advancing(y) },
+                    _ => { warn!("Unexpected match result from {:?}", delta.y); ResizeMagnitude::None }
+                };
+                *westward_magnitude = match delta.x {
+                    x if x < 0.0 => { ResizeMagnitude::Advancing(x.abs()) },
+                    x if x == 0.0 => { ResizeMagnitude::None },
+                    x if x > 0.0 => { ResizeMagnitude::Retreating(x) },
+                    _ => { warn!("Unexpected match result from {:?}", delta.x); ResizeMagnitude::None }
+                };
+            },
+            ResizeDirection::West { westward_magnitude }=> {
+                *westward_magnitude = match delta.x {
+                    x if x < 0.0 => { ResizeMagnitude::Advancing(x.abs()) },
+                    x if x == 0.0 => { ResizeMagnitude::None },
+                    x if x > 0.0 => { ResizeMagnitude::Retreating(x) },
+                    _ => { warn!("Unexpected match result from {:?}", delta.x); ResizeMagnitude::None }
+                };
+            },
+            ResizeDirection::NorthWest { northward_magnitude, westward_magnitude } => {
+                *northward_magnitude = match delta.y {
+                    y if y < 0.0 => { ResizeMagnitude::Advancing(y.abs()) },
+                    y if y == 0.0 => { ResizeMagnitude::None },
+                    y if y > 0.0 => { ResizeMagnitude::Retreating(y) },
+                    _ => { warn!("Unexpected match result from {:?}", delta.y); ResizeMagnitude::None }
+                };
+                *westward_magnitude = match delta.x {
+                    x if x < 0.0 => { ResizeMagnitude::Advancing(x.abs()) },
+                    x if x == 0.0 => { ResizeMagnitude::None },
+                    x if x > 0.0 => { ResizeMagnitude::Retreating(x) },
+                    _ => { warn!("Unexpected match result from {:?}", delta.x); ResizeMagnitude::None }
+                };
+            }
+        };
+        self
+    }
+
+}
+
+/// What is the trend of the [`ResizeDirection`]? Is it growing or shrinking the [`Rect`]?
+#[derive(Component, Clone, Copy, Debug, Default, PartialEq)]
+pub enum ResizeMagnitude {
+    #[default]
+    None,
+    Advancing(f32),
+    Retreating(f32)
+}
+
+impl ResizeMagnitude {
+    /// Get the little [`f32`] number inside representing logical pixels, 
+    /// without having to use clunky `var.0` syntax.  
+    ///   
+    /// Gives `0.0` if [`ResizeMagnitude::None`].
+    pub fn get(&self) -> f32 {
+        match self {
+            ResizeMagnitude::None => { 0.0 },
+            ResizeMagnitude::Advancing(x) | ResizeMagnitude::Retreating(x) => { x.clone() }
+        }
+    }
+
+    /// Set magnitude value.
+    pub fn set(&mut self, magnitude: f32) -> &mut Self {
+        match self {
+            ResizeMagnitude::None => { },
+            ResizeMagnitude::Advancing(x) | ResizeMagnitude::Retreating(x) => { *x = magnitude; },
+        }
+        self
+    }
+
+    /// Add to current magnitude value.
+    pub fn add(&mut self, added_magnitude: f32) -> &mut Self {
+        match self {
+            ResizeMagnitude::None => { },
+            ResizeMagnitude::Advancing(x) | ResizeMagnitude::Retreating(x) => { *x += added_magnitude; },
+        }
+        self
+    }
+
+    /// Easier-to-read check if [`ResizeMagnitude::None`].
+    pub fn is_none(&self) -> bool {
+        matches!(self, ResizeMagnitude::None)
+    }
+
+    /// Easier-to-read check if [`ResizeMagnitude::Advancing`].
+    pub fn is_advancing(&self) -> bool {
+        matches!(self, ResizeMagnitude::Advancing(_))
+    }
+
+    /// Easier-to-read check if [`ResizeMagnitude::Retreating`].
+    pub fn is_retreating(&self) -> bool {
+        matches!(self, ResizeMagnitude::Retreating(_))
+    }
+
+    /// Check if the magnitude is negative.  
+    ///   
+    /// Typically, this means the [`ResizeRequest`] should be canceled.
+    pub fn is_negative(&self) -> bool {
+        match self {
+            ResizeMagnitude::None => { false },
+            ResizeMagnitude::Advancing(x) if *x < 0.0 => { true },
+            ResizeMagnitude::Retreating(x) if *x < 0.0 => { true },
+            _ => { false }
+        }
+    }
+
+    /// If [`ResizeMagnitude::Advancing`], get [`ResizeMagnitude::Retreating`].  
+    /// If [`ResizeMagnitude::Retreating`], get [`ResizeMagnitude::Advancing`].  
+    /// If [`ResizeMagnitude::None`], get [`ResizeMagnitude::None`].  
+    ///   
+    /// All magnitudes transfer.
+    pub fn get_opposite(&self) -> ResizeMagnitude {
+        match self {
+            ResizeMagnitude::None => { ResizeMagnitude::None },
+            ResizeMagnitude::Advancing(x) => { ResizeMagnitude::Retreating(x.clone()) },
+            ResizeMagnitude::Retreating(x) => { ResizeMagnitude::Advancing(x.clone()) }
+        }
+    }
+}
+
+/// Contains every [`Territory`] [`Entity`] neighbor that this one is linked to, separated by what side they're linked on.  
+///   
+/// Used for graph traversals when handling linked move requests.
+#[derive(Component)]
+pub struct CardinalConnections {
+    pub northern: Vec<Entity>,
+    pub eastern: Vec<Entity>,
+    pub southern: Vec<Entity>,
+    pub western: Vec<Entity>,
+}
+
+impl Default for CardinalConnections {
+    fn default() -> Self {
+        CardinalConnections { northern: Vec::new(), eastern: Vec::new(), southern: Vec::new(), western: Vec::new() }
+    }
+}
+
+impl CardinalConnections {
+    /// Gets a copy of the northern connections in an [`Entity`] [`Vec`].
+    pub fn northern(&self) -> Vec<Entity> {
+        self.northern.clone()
+    }
+
+    /// Gets a copy of the eastern connections in an [`Entity`] [`Vec`].
+    pub fn eastern(&self) -> Vec<Entity> {
+        self.eastern.clone()
+
+    }
+    /// Gets a copy of the southern connections in an [`Entity`] [`Vec`].
+    pub fn southern(&self) -> Vec<Entity> {
+        self.southern.clone()
+    }
+
+    /// Gets a copy of the western connections in an [`Entity`] [`Vec`].
+    pub fn western(&self) -> Vec<Entity> {
+        self.western.clone()
+    }
+
+    /// Get a [`Vec`] of every [`Entity`] linked.
+    pub fn get_all_vec(&self) -> Vec<Entity> {
+        let mut total_vec = Vec::new();
+        total_vec.extend(&self.northern);
+        total_vec.extend(&self.eastern);
+        total_vec.extend(&self.southern);
+        total_vec.extend(&self.western);
+        total_vec
+    }
+
+    /// Get a [`Vec`] of stored [`Entity`] connections the same side as the [`ResizeDirection`] passed in. 
+    ///   
+    /// Corner directions get a combined [`Vec`] of the adjacent sides.
+    pub fn get_resize_direction_vec(&self, resize_direction: ResizeDirection) -> Vec<Entity> {
+        let mut result_vec = Vec::new();
+        match resize_direction {
+            ResizeDirection::North{..} => { result_vec.extend(&self.northern) },
+            ResizeDirection::NorthEast{..} => { result_vec.extend(&self.northern); result_vec.extend( &self.eastern) },
+            ResizeDirection::East{..} => { result_vec.extend(&self.eastern) },
+            ResizeDirection::SouthEast{..} => { result_vec.extend(&self.southern); result_vec.extend(&self.eastern) },
+            ResizeDirection::South{..} => { result_vec.extend(&self.southern) },
+            ResizeDirection::SouthWest{..} => { result_vec.extend(&self.southern); result_vec.extend(&self.western) },
+            ResizeDirection::West{..} => { result_vec.extend(&self.western) },
+            ResizeDirection::NorthWest{..} => { result_vec.extend(&self.northern); result_vec.extend(&self.western) }
+        }
+        result_vec
+    }
+}
+
+/// Marks a [`TerritoryTabs`] UI element as having been commanded to move without changing size. Entities with this component will be processed 
+/// by motion systems and this component will be removed once all processing is complete.
+#[derive(Component, Clone)]
+pub struct DragRequest {
+    /// Collection of [`Rect`]s describing the [`DragRequest`]'s proposed location in the `Window`.
+    pub proposed_expanse: RectKit,
+    /// Drag vector in **screenspace** coordinates. Flip the y to get a worldspace delta.
+    pub drag_delta: Vec2
+}
+
+impl Default for DragRequest {
+    fn default() -> Self {
+        DragRequest { proposed_expanse: RectKit::default(), drag_delta: Vec2::ZERO }
+    }
+}
+
+impl DragRequest {
+    pub fn new (proposed_expanse: RectKit, drag_delta: Vec2) -> Self {
+        DragRequest { proposed_expanse, drag_delta }
+    }
+
+    /// Gets the [`RectKit`] containing the proposed [`Rect`]s UI element wants to move to.
+    pub fn proposed_expanse(&self) -> RectKit { self.proposed_expanse }
+
+    /// Gets the delta of the drag movement in **screenspace** coordinates.
+    pub fn drag_delta(&self) -> Vec2 { self.drag_delta }
+
+    /// Set new drag delta in **screenspace** coordinates.
+    pub fn set_drag_delta(&mut self, delta: Vec2) -> &mut Self { self.drag_delta = delta; self }
+
+    /// Add given x to drag delta x.
+    pub fn add_to_drag_delta_x(&mut self, x: f32) -> &mut Self { self.drag_delta.x += x; self }
+
+    /// Add given y to drag delta y.
+    pub fn add_to_drag_delta_y(&mut self, y: f32) -> &mut Self { self.drag_delta.y += y; self } 
+}
+
+/// Marks a [`TerritoryTabs`] UI element as having been commanded to change its boundaries. Entities with this component will be processed 
+/// by motion systems and this component will be removed once all processing is complete.
+#[derive(Component, Clone)]
+pub struct ResizeRequest {
+    /// Collection of [`Rect`]s describing the [`ResizeRequest`]'s proposed location and size in the `Window`.
+    pub proposed_expanse: RectKit,
+    /// What resize handle type did the user manipulate to command this motion?
+    pub resize_direction: ResizeDirection
+}
+
+impl Default for ResizeRequest {
+    fn default() -> Self {
+        ResizeRequest { 
+            proposed_expanse: RectKit::default(), 
+            resize_direction: ResizeDirection::West { westward_magnitude: ResizeMagnitude::None }
+        }
+    }
+}
+
+impl ResizeRequest {
+    pub fn new (
+            proposed_expanse: RectKit, 
+            resize_direction: ResizeDirection
+        ) -> Self {
+        ResizeRequest { 
+            proposed_expanse,
+            resize_direction,
+        }
+    }
+
+    /// Gets the [`RectKit`] containing the proposed [`Rect`]s UI element wants to move to.
+    pub fn proposed_expanse(&self) -> RectKit { self.proposed_expanse }
+
+    /// Gets a copy of the [`ResizeDirection`].
+    pub fn resize_direction(&self) -> ResizeDirection { self.resize_direction.clone() }
+}
+
+/// Marker component for group of [`Territory`]s separated for drag querying.
+#[derive(Component)]
+pub struct DragTerritoryGroup;
+
+/// Marker component for group of [`Territory`]s separated for resize querying.
+#[derive(Component)]
+pub struct AdvancingTerritoryGroup(pub ResizeDirection);
+impl AdvancingTerritoryGroup {
+    /// Get a clone of the wrapped [`ResizeDirection`].
+    pub fn resize_direction(&self) -> ResizeDirection {
+        self.0.clone()
+    }
+}
+
+/// Marker component for group of [`Territory`]s separated for resize querying.
+#[derive(Component)]
+pub struct RetreatingTerritoryGroup(pub ResizeDirection);
+impl RetreatingTerritoryGroup {
+    /// Get a clone of the wrapped [`ResizeDirection`].
+    pub fn resize_direction(&self) -> ResizeDirection {
+        self.0.clone()
+    }
+}
+
+
+
+
+
+/// The intended movement behavior [`MoveRequest`] wants.
+/// To be recfactored out!
+#[derive(Clone)]
+pub enum MoveRequestType {
+    /// Some display libraries are unable to send information about if the UI element is being dragged or resized.
+    /// [`MoveRequest`] processing systems will determine the movement type if handed a [`MoveRequestType::Unknown`].
+    Unknown,
+    /// The movement changes the [`Rect`]'s position but not its size.
+    Drag,
+    /// The movement changes the [`Rect`]'s size and/or position. Wraps around a ResizeDirection enum.
+    Resize(ResizeDirection)
+}
+
+/// Marks a [`TerritoryTabs`] UI element as having been commanded to move. Entities with this component will be processed 
+/// by motion systems and this component will be removed once all processing is complete.
+/// To be refactored out!
+#[derive(Component, Clone)]
+pub struct MoveRequest {
+    /// Collection of [`Rect`]s describing the [`MoveRequest`]'s proposed location in the `Window`.
+    pub proposed_expanse: RectKit,
+    /// Kind of movement that will inform processing systems.
+    pub move_type: MoveRequestType
+}
+
+impl Default for MoveRequest {
+    fn default() -> Self {
+        MoveRequest {
+            proposed_expanse: RectKit::default(),
+            move_type: MoveRequestType::Unknown
+        }
+    }
+}
+
+impl MoveRequest {
+    pub fn new (
+        proposed_expanse: RectKit,
+        move_type: MoveRequestType
+    ) -> Self {
+        MoveRequest {
+            proposed_expanse,
+            move_type
+        }
+    }
+
+    /// Gets the [`RectKit`] containing the proposed [`Rect`]s UI element wants to move to.
+    pub fn proposed_expanse(&self) -> RectKit {self.proposed_expanse}
+
+    /// Gets the [`MoveRequestType`] this [`MoveRequest`] component is set to.
+    pub fn move_type(&self) -> MoveRequestType {self.move_type.clone()}
+
+    /// Changes the `move_type` to `Unknown`, meaning we don't yet have the information to know what this component wants.
+    pub fn move_type_unknown(&mut self) -> &mut Self {
+        self.move_type = MoveRequestType::Unknown;
+        self
+    }
+
+    /// Changes the `move_type` to `Drag`, marking the UI element as moving without changing size.
+    pub fn move_type_drag(&mut self) -> &mut Self {
+        self.move_type = MoveRequestType::Drag;
+        self
+    }
+
+    /// Changes the `move_type` to `Resize`, marking the UI element as changing size in a specific direction.
+    pub fn move_type_resize(&mut self, resize_direction: ResizeDirection) -> &mut Self {
+        self.move_type = MoveRequestType::Resize(resize_direction);
+        self
+    }
+}
+
+/// Replacement for placeholders and overlays.
+pub struct Glance {
+
+}
+
+/// Common functionality between the directional tab bars.
+/// We keep the tab bars as separate components for query granularity.
+pub trait TabTrim {
+    
+}
+
+/// Northern border area of the [`Territory`] that hosts the feature tabs.
+#[derive(Component, Clone, Copy)]
+pub struct NorthTabs {
+
+}
+
+impl TabTrim for NorthTabs {
+
+}
+
+/// Eastern border area of the [`Territory`] that hosts the feature tabs.
+#[derive(Component, Clone, Copy)]
+pub struct EastTabs {
+
+}
+
+impl TabTrim for EastTabs {
+
+}
+
+/// Southern border area of the [`Territory`] that hosts the feature tabs.
+#[derive(Component, Clone, Copy)]
+pub struct SouthTabs {
+
+}
+
+impl TabTrim for SouthTabs {
+
+}
+
+/// Western border area of the [`Territory`] that hosts the feature tabs.
+#[derive(Component, Clone, Copy)]
+pub struct WestTabs {
+
+}
+
+impl TabTrim for WestTabs {
 
 }
 
@@ -586,82 +1317,6 @@ impl Territory {
     }
 
 }
-
-/// The intended movement behavior [`MoveRequest`] wants.
-#[derive(Clone, Copy)]
-pub enum MoveRequestType {
-    /// Some display libraries are unable to send information about if the UI element is being dragged or resized.
-    /// [`MoveRequest`] processing systems will determine the movement type if handed a [`MoveRequestType::Unknown`].
-    Unknown,
-    /// The movement changes the [`Rect`]'s position but not its size.
-    Drag,
-    /// The movement changes the [`Rect`]'s size and/or position. Wraps around a ResizeDirection enum.
-    Resize(ResizeDirection)
-}
-
-/// Marks a [`TerritoryTabs`] UI element as having been commanded to move. Entities with this component will be processed 
-/// by motion systems and this component will be removed once all processing is complete.
-#[derive(Component, Clone)]
-pub struct MoveRequest {
-    /// Collection of [`Rect`]s describing the [`MoveRequest`]'s proposed location in the `Window`.
-    pub proposed_expanse: RectKit,
-    /// Kind of movement that will inform processing systems.
-    pub move_type: MoveRequestType
-}
-
-impl Default for MoveRequest {
-    fn default() -> Self {
-        MoveRequest {
-            proposed_expanse: RectKit::default(),
-            move_type: MoveRequestType::Unknown
-        }
-    }
-}
-
-impl MoveRequest {
-    pub fn new (
-        proposed_expanse: RectKit,
-        move_type: MoveRequestType
-    ) -> Self {
-        MoveRequest {
-            proposed_expanse,
-            move_type
-        }
-    }
-
-    /// Gets the [`RectKit`] containing the proposed [`Rect`]s UI element wants to move to.
-    pub fn proposed_expanse(&self) -> RectKit {self.proposed_expanse}
-
-    /// Gets the [`MoveRequestType`] this [`MoveRequest`] component is set to.
-    pub fn move_type(&self) -> MoveRequestType {self.move_type}
-
-    /// Changes the `move_type` to `Unknown`, meaning we don't yet have the information to know what this component wants.
-    pub fn move_type_unknown(&mut self) -> &mut Self {
-        self.move_type = MoveRequestType::Unknown;
-        self
-    }
-
-    /// Changes the `move_type` to `Drag`, marking the UI element as moving without changing size.
-    pub fn move_type_drag(&mut self) -> &mut Self {
-        self.move_type = MoveRequestType::Drag;
-        self
-    }
-
-    /// Changes the `move_type` to `Resize`, marking the UI element as changing size in a specific direction.
-    pub fn move_type_resize(&mut self, resize_direction: ResizeDirection) -> &mut Self {
-        self.move_type = MoveRequestType::Resize(resize_direction);
-        self
-    }
-}
-
-/// `Component`  
-/// \
-/// User has marked this UI element as `Locked`, and they don't want any systems moving it around!
-#[derive(Component)]
-pub struct Locked;
-
-
-
 
 #[cfg(test)]
 mod tests {
